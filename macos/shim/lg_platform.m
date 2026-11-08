@@ -97,6 +97,52 @@ int32_t lg_pad_state(uint32_t index, LgPad *out) {
     }
 }
 
+// Highest refresh rate of the screen showing the game window (ProMotion reports 120),
+// or of the main screen before the window exists. 0 when unknown.
+int32_t lg_display_refresh_hz(void) {
+    @autoreleasepool {
+        NSApplication *app = NSApp;
+        NSScreen *screen = app.keyWindow.screen ?: app.mainWindow.screen ?: NSScreen.mainScreen;
+        return screen != nil ? (int32_t)screen.maximumFramesPerSecond : 0;
+    }
+}
+
+// Resize the game window so its *content* is `width` x `height` framebuffer pixels
+// (the game's menu sizes are pixels; AppKit sizes are points), shrunk to fit the
+// screen's visible area with the aspect ratio kept, and moved fully on screen.
+// Returns 1 when a window was resized. Does nothing in fullscreen.
+int32_t lg_set_window_pixels(uint32_t width, uint32_t height) {
+    @autoreleasepool {
+        NSApplication *app = NSApp;
+        NSWindow *window = app.mainWindow ?: app.keyWindow ?: app.windows.firstObject;
+        if (window == nil || width == 0 || height == 0) return 0;
+        if ((window.styleMask & NSWindowStyleMaskFullScreen) != 0) return 0;
+        CGFloat scale = window.backingScaleFactor > 0 ? window.backingScaleFactor : 1;
+        NSSize content = NSMakeSize(width / scale, height / scale);
+        NSScreen *screen = window.screen ?: NSScreen.mainScreen;
+        if (screen != nil) {
+            NSRect visible = screen.visibleFrame;
+            // Room for content = visible area minus the window's frame decorations.
+            NSRect probe = [window frameRectForContentRect:NSMakeRect(0, 0, 100, 100)];
+            CGFloat maxW = visible.size.width - (probe.size.width - 100);
+            CGFloat maxH = visible.size.height - (probe.size.height - 100);
+            CGFloat fit = MIN(1.0, MIN(maxW / content.width, maxH / content.height));
+            content = NSMakeSize(floor(content.width * fit), floor(content.height * fit));
+        }
+        NSRect frame = window.frame;
+        NSRect target = [window frameRectForContentRect:NSMakeRect(0, 0, content.width, content.height)];
+        // Keep the top-left corner where it was, then pull the frame back on screen.
+        target.origin = NSMakePoint(frame.origin.x, NSMaxY(frame) - target.size.height);
+        if (screen != nil) {
+            NSRect visible = screen.visibleFrame;
+            target.origin.x = MIN(MAX(target.origin.x, NSMinX(visible)), NSMaxX(visible) - target.size.width);
+            target.origin.y = MIN(MAX(target.origin.y, NSMinY(visible)), NSMaxY(visible) - target.size.height);
+        }
+        [window setFrame:target display:YES animate:NO];
+        return 1;
+    }
+}
+
 // True when this application is frontmost and owns the key window.
 int32_t lg_window_focused(void) {
     @autoreleasepool {

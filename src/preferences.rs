@@ -205,7 +205,7 @@ impl Preferences {
             let (w, h) = SIZES[self.resolution];
             // Menu resolutions are framebuffer pixels, independent of desktop DPI.
             // Fullscreen remains borderless at the desktop's native resolution.
-            miniquad::window::set_window_size(w, h);
+            crate::platform::set_window_size(w, h); // fork: macOS fits pixels to the screen
         }
     }
     pub fn bind(&mut self, row: usize, name: &str, pad: bool) -> bool {

@@ -17,6 +17,22 @@ struct LgPad {
 extern "C" {
     fn lg_pad_state(index: u32, out: *mut LgPad) -> i32;
     fn lg_window_focused() -> i32;
+    fn lg_display_refresh_hz() -> i32;
+    fn lg_set_window_pixels(width: u32, height: u32) -> i32;
+}
+
+/// Size the window content in framebuffer pixels, fitted to the screen. False when
+/// no window was available (the caller then falls back to miniquad).
+pub fn set_window_pixels(width: u32, height: u32) -> bool {
+    // Plain integers; the shim reads and resizes NSApp's window on the main thread.
+    unsafe { lg_set_window_pixels(width, height) == 1 }
+}
+
+/// Refresh rate of the game's screen in Hz, if AppKit reports one.
+pub fn display_refresh_hz() -> Option<u32> {
+    // No arguments; reads NSScreen state on the main thread that owns the window.
+    let hz = unsafe { lg_display_refresh_hz() };
+    (hz > 0).then_some(hz as u32)
 }
 
 pub fn pad_state(index: u32) -> Option<PadState> {
