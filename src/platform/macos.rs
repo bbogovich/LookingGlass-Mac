@@ -20,6 +20,7 @@ extern "C" {
     fn lg_display_refresh_hz() -> i32;
     fn lg_set_window_pixels(width: u32, height: u32) -> i32;
     fn lg_option_held() -> i32;
+    fn lg_take_fullscreen_change() -> i32;
 }
 
 /// Size the window content in framebuffer pixels, fitted to the screen. False when
@@ -49,6 +50,16 @@ pub fn pad_state(index: u32) -> Option<PadState> {
         rx: raw.rx,
         ry: raw.ry,
     })
+}
+
+/// The window's new fullscreen state, if it changed since the last call.
+pub fn take_fullscreen_change() -> Option<bool> {
+    // No arguments; returns and clears an integer owned by the main thread.
+    match unsafe { lg_take_fullscreen_change() } {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    }
 }
 
 /// Whether the Option key is held right now (used at launch to open Setup).

@@ -71,7 +71,9 @@ pub fn init_working_dir() -> anyhow::Result<()> {
 #[cfg(target_os = "macos")]
 fn use_bundled_data() -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
-    let Some(contents) = exe.parent().and_then(Path::parent) else { return Ok(()) };
+    let Some(contents) = exe.parent().and_then(Path::parent) else {
+        return Ok(());
+    };
     let bundled = contents.join("Resources/game-data/base");
     if !bundled.is_dir() {
         return Ok(());
@@ -80,7 +82,8 @@ fn use_bundled_data() -> anyhow::Result<()> {
     let config = root.join("private/data-path.txt");
     let current = std::fs::read_to_string(&config).unwrap_or_default();
     let current = current.trim();
-    let other_bundle = current.contains(".app/Contents/Resources/game-data/") && Path::new(current) != bundled;
+    let other_bundle =
+        current.contains(".app/Contents/Resources/game-data/") && Path::new(current) != bundled;
     if other_bundle || !crate::data_setup::configured_ok(&root) {
         crate::data_setup::save_text(&config, &format!("{}\n", bundled.display()))?;
     }
@@ -97,13 +100,20 @@ fn run_setup_helper() -> anyhow::Result<()> {
         .and_then(Path::parent)
         .map(|contents| contents.join("Helpers/Looking Glass Setup.app"))
         .filter(|p| p.is_dir())
-        .context("The Setup helper is missing from the app. Rebuild it with tools/build_macos.py.")?;
+        .context(
+            "The Setup helper is missing from the app. Rebuild it with tools/build_macos.py.",
+        )?;
     let mut open = std::process::Command::new("/usr/bin/open");
     open.args(["-W", "-n"]);
     if let Some(home) = std::env::var_os("LOOKING_GLASS_HOME") {
-        open.arg("--env").arg(format!("LOOKING_GLASS_HOME={}", home.to_string_lossy()));
+        open.arg("--env")
+            .arg(format!("LOOKING_GLASS_HOME={}", home.to_string_lossy()));
     }
-    let status = open.arg(&helper).args(["--args", "--from-game"]).status().context("open Setup")?;
+    let status = open
+        .arg(&helper)
+        .args(["--args", "--from-game"])
+        .status()
+        .context("open Setup")?;
     anyhow::ensure!(status.success(), "Setup could not be opened.");
     Ok(())
 }
@@ -113,9 +123,7 @@ fn run_setup_helper() -> anyhow::Result<()> {
 fn bundle_home(exe: &Path, home: &Path) -> Option<PathBuf> {
     let parts: Vec<_> = exe.components().map(|c| c.as_os_str()).collect();
     let in_bundle = parts.windows(3).any(|w| {
-        w[0].to_str().is_some_and(|s| s.ends_with(".app"))
-            && w[1] == "Contents"
-            && w[2] == "MacOS"
+        w[0].to_str().is_some_and(|s| s.ends_with(".app")) && w[1] == "Contents" && w[2] == "MacOS"
     });
     in_bundle.then(|| home.join("Library/Application Support/Looking Glass"))
 }
@@ -148,6 +156,22 @@ pub fn set_window_size(width: u32, height: u32) {
     macroquad::miniquad::window::set_window_size(width, height);
 }
 
+/// Copy a fullscreen change made outside the menu (Cmd+Return, the green button) into
+/// the preferences, so the menu stays correct and the choice survives a restart.
+/// True when `prefs` changed. macOS only; elsewhere nothing else can change it.
+pub fn sync_fullscreen(prefs: &mut crate::preferences::Preferences) -> bool {
+    #[cfg(target_os = "macos")]
+    if let Some(fullscreen) = macos::take_fullscreen_change() {
+        if prefs.fullscreen != fullscreen {
+            prefs.fullscreen = fullscreen;
+            let _ = prefs.save(); // Losing this only forgets the choice at the next launch.
+            return true;
+        }
+    }
+    let _ = prefs;
+    false
+}
+
 /// Hold each frame to a steady deadline at the display's refresh rate (macOS only).
 ///
 /// miniquad 0.4.8 on macOS draws from both its free-running event loop and a 16 ms
@@ -178,9 +202,15 @@ impl Pacer {
         use std::time::{Duration, Instant};
         let now = Instant::now();
         // Re-read the rate now and then: the window can move between screens.
-        if self.checked.is_none_or(|t| now - t > Duration::from_secs(2)) {
+        if self
+            .checked
+            .is_none_or(|t| now - t > Duration::from_secs(2))
+        {
             self.checked = Some(now);
-            self.hz = match std::env::var("LOOKING_GLASS_FPS").ok().and_then(|v| v.parse().ok()) {
+            self.hz = match std::env::var("LOOKING_GLASS_FPS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+            {
                 Some(hz) => hz,
                 None => macos::display_refresh_hz().unwrap_or(60),
             };

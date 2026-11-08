@@ -148,10 +148,44 @@ int32_t lg_option_held(void) {
     return (NSEvent.modifierFlags & NSEventModifierFlagOption) != 0 ? 1 : 0;
 }
 
-// True when this application is frontmost and owns the key window.
+// The window's latest fullscreen state, until read: -1 none, 0 windowed, 1 fullscreen.
+static int32_t lg_fullscreen_change = -1;
+
+int32_t lg_take_fullscreen_change(void) {
+    int32_t change = lg_fullscreen_change;
+    lg_fullscreen_change = -1;
+    return change;
+}
+
+// Cmd+Return toggles fullscreen in every game loop. The event is consumed here, so the
+// game never sees it as Enter (which would skip a scene or press a menu button).
+static void lg_install_window_hooks(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        enum { LG_KEY_RETURN = 36, LG_KEY_KEYPAD_ENTER = 76 };
+        NSEventModifierFlags relevant = NSEventModifierFlagCommand | NSEventModifierFlagShift |
+                                        NSEventModifierFlagOption | NSEventModifierFlagControl;
+        [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                              handler:^NSEvent *(NSEvent *event) {
+            BOOL enter = event.keyCode == LG_KEY_RETURN || event.keyCode == LG_KEY_KEYPAD_ENTER;
+            if (!enter || (event.modifierFlags & relevant) != NSEventModifierFlagCommand) return event;
+            if (!event.isARepeat) [NSApp.keyWindow toggleFullScreen:nil];
+            return nil;
+        }];
+        NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+        [center addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:nil
+                        usingBlock:^(NSNotification *note) { lg_fullscreen_change = 1; }];
+        [center addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil
+                        usingBlock:^(NSNotification *note) { lg_fullscreen_change = 0; }];
+    });
+}
+
+// True when this application is frontmost and owns the key window. Every game loop polls
+// this once AppKit is running, which makes it the place to install the window hooks.
 int32_t lg_window_focused(void) {
     @autoreleasepool {
         NSApplication *app = NSApp;
+        if (app != nil) lg_install_window_hooks();
         return (app != nil && app.isActive && app.keyWindow != nil) ? 1 : 0;
     }
 }

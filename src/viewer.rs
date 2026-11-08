@@ -871,6 +871,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
     retry.remember(game_snapshot!());
     loop {
         crate::platform::pace_frame(); // fork: steady macOS frame pacing; no-op elsewhere
+        crate::platform::sync_fullscreen(&mut preferences); // fork: Cmd+Return; no-op elsewhere
         let mut frame_profile = crate::frame_profile::span("frame_cpu");
         input.update(&preferences, window_focused());
         let overlay_before = menu || inventory_menu || console.open || paused;

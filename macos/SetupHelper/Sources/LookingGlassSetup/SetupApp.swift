@@ -6,7 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Also correct when run as a bare executable during development.
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
@@ -20,9 +19,23 @@ struct SetupApp: App {
         Window("Looking Glass Setup", id: "setup") {
             SetupView(model: model)
                 .frame(width: 560)
-                .task { await model.start() }
+                .task {
+                    bringToFront()
+                    await model.start()
+                }
         }
         .windowResizability(.contentSize)
+    }
+}
+
+/// The game opens Setup from the background, where macOS will not activate a new app on
+/// request alone. Ordering the window explicitly keeps it above other apps' windows.
+@MainActor
+private func bringToFront() {
+    NSApp.activate()
+    for window in NSApp.windows {
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 }
 

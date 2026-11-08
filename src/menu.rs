@@ -1585,6 +1585,9 @@ impl Menu {
             let page = self.page.unwrap_or(Page::Main);
             let mut action = None;
             let focused = crate::look::window_focused();
+            if crate::platform::sync_fullscreen(prefs) { // fork: Cmd+Return; no-op elsewhere
+                self.draft.fullscreen = prefs.fullscreen;
+            }
             input.update(prefs, focused);
             self.using_pad = input.using_pad;
             self.save_film.update_audio(audio.settings, focused);
