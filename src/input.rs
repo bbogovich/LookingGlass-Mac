@@ -193,6 +193,7 @@ struct RawPad {
     rx: i16,
     ry: i16,
 }
+#[cfg(windows)]
 #[repr(C)]
 #[derive(Default)]
 struct RawState {
@@ -213,8 +214,16 @@ fn read_pad(index: u32) -> Option<RawPad> {
     }
     #[cfg(not(windows))]
     {
-        let _ = index;
-        None
+        // macOS: GameController.framework via src/platform; elsewhere always None.
+        crate::platform::pad_state(index).map(|p| RawPad {
+            buttons: p.buttons,
+            lt: p.lt,
+            rt: p.rt,
+            lx: p.lx,
+            ly: p.ly,
+            rx: p.rx,
+            ry: p.ry,
+        })
     }
 }
 fn stick(x: i16, y: i16, deadzone: f32) -> Vec2 {

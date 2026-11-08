@@ -71,6 +71,7 @@ mod pandemonium_render;
 mod pandemonium_route;
 mod particles;
 mod plants;
+mod platform;
 mod pool;
 mod pool_check;
 mod power_pose;
@@ -156,6 +157,7 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    platform::init_working_dir()?;
     let mut o = Options {
         difficulty: Default::default(),
         save_dir: PathBuf::from("private/saves"),

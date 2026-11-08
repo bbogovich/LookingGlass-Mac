@@ -8,6 +8,8 @@
 /downloads/
 /data/
 /Alice1/
+# Local planning documents for the macOS port; never committed.
+/.plan/
 # Game data, downloads and compiled/research artifacts must never enter Git.
 *.pk3
 *.7z

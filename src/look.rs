@@ -80,8 +80,8 @@ pub fn window_focused() -> bool {
 }
 #[cfg(not(target_os = "windows"))]
 pub fn window_focused() -> bool {
-    true
-} // Other desktop platforms are not verified yet.
+    crate::platform::window_focused()
+} // macOS asks AppKit; other desktop platforms are not verified yet (always true).
 
 #[cfg(test)]
 mod tests {
