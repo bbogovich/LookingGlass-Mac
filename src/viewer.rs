@@ -688,6 +688,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
     // Some map starts still expect a cinematic or scripted moving support.
     let mut spawn_landing = true;
     let mut player = spawn.unwrap_or_else(|| Player::new(pos - Vec3::Z * EYE_HEIGHT));
+    let mut ground_snap = crate::ground_snap::GroundSnap::default(); // fork: slope/ledge hover fix
     let mut alice = Character::load(&mut assets).context("Loading Alice's character")?;
     let mut aim_pointer = crate::targeting::Pointer::load(&mut assets)?;
     alice.reset(&player, yaw);
@@ -2917,7 +2918,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
         }
         alice.atmosphere(&scene.atmosphere, camera);
         if show_alice && !interactions.school.as_ref().is_some_and(|s| s.cinematic()) {
-            alice.draw_ghost(player.feet, fullbright, stats.invisible > 0.);
+            alice.draw_ghost(ground_snap.feet(&scene.world, &player), fullbright, stats.invisible > 0.);
         }
         npcs.draw(
             camera,

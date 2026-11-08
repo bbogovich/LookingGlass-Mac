@@ -45,6 +45,7 @@ mod footing;
 mod fortress;
 mod fortress_route;
 mod frozen;
+mod ground_snap;
 mod gym;
 mod hud;
 mod input;
