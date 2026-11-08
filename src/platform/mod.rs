@@ -46,6 +46,9 @@ pub fn init_working_dir() -> anyhow::Result<()> {
                 .with_context(|| format!("enter game folder {}", dir.display()))?;
         }
         std::fs::create_dir_all("private").context("create private folder")?;
+        if in_bundle {
+            use_bundled_data()?;
+        }
         // A plain launch of the app (Finder, Dock) opens Setup first when no game data
         // is configured, or when Option is held. Command-line runs are never redirected.
         if in_bundle && std::env::args().len() == 1 {
@@ -58,6 +61,28 @@ pub fn init_working_dir() -> anyhow::Result<()> {
                 );
             }
         }
+    }
+    Ok(())
+}
+
+/// Point the game at data built into this app, when there is any and nothing else
+/// usable is configured. An imported copy from Setup stays in charge; a path into a
+/// different copy of the app (moved, or rebuilt elsewhere) is replaced.
+#[cfg(target_os = "macos")]
+fn use_bundled_data() -> anyhow::Result<()> {
+    let exe = std::env::current_exe()?;
+    let Some(contents) = exe.parent().and_then(Path::parent) else { return Ok(()) };
+    let bundled = contents.join("Resources/game-data/base");
+    if !bundled.is_dir() {
+        return Ok(());
+    }
+    let root = std::env::current_dir()?;
+    let config = root.join("private/data-path.txt");
+    let current = std::fs::read_to_string(&config).unwrap_or_default();
+    let current = current.trim();
+    let other_bundle = current.contains(".app/Contents/Resources/game-data/") && Path::new(current) != bundled;
+    if other_bundle || !crate::data_setup::configured_ok(&root) {
+        crate::data_setup::save_text(&config, &format!("{}\n", bundled.display()))?;
     }
     Ok(())
 }

@@ -8,10 +8,13 @@
 /downloads/
 /data/
 /Alice1/
+/Alice1_2001/
 # Local planning documents for the macOS port; never committed.
 /.plan/
 # SwiftPM build output for the macOS Setup helper.
 /macos/SetupHelper/.build/
+# The assembled macOS app; it can contain the player's game data, so never share it.
+/build/
 # Game data, downloads and compiled/research artifacts must never enter Git.
 *.pk3
 *.7z
