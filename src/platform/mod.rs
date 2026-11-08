@@ -38,6 +38,7 @@ pub fn init_working_dir() -> anyhow::Result<()> {
             .ok()
             .zip(std::env::var_os("HOME").map(PathBuf::from))
             .and_then(|(exe, home)| bundle_home(&exe, &home));
+        let in_bundle = bundled.is_some();
         if let Some(dir) = explicit.or(bundled) {
             std::fs::create_dir_all(&dir)
                 .with_context(|| format!("create game folder {}", dir.display()))?;
@@ -45,7 +46,40 @@ pub fn init_working_dir() -> anyhow::Result<()> {
                 .with_context(|| format!("enter game folder {}", dir.display()))?;
         }
         std::fs::create_dir_all("private").context("create private folder")?;
+        // A plain launch of the app (Finder, Dock) opens Setup first when no game data
+        // is configured, or when Option is held. Command-line runs are never redirected.
+        if in_bundle && std::env::args().len() == 1 {
+            let root = std::env::current_dir()?;
+            if macos::option_held() || !crate::data_setup::configured_ok(&root) {
+                run_setup_helper()?;
+                anyhow::ensure!(
+                    crate::data_setup::configured_ok(&root),
+                    "Game data is not set up yet. Open Looking Glass again to choose it."
+                );
+            }
+        }
     }
+    Ok(())
+}
+
+/// Open the bundled Setup helper and wait for it to close.
+#[cfg(target_os = "macos")]
+fn run_setup_helper() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let exe = std::env::current_exe()?;
+    let helper = exe
+        .parent()
+        .and_then(Path::parent)
+        .map(|contents| contents.join("Helpers/Looking Glass Setup.app"))
+        .filter(|p| p.is_dir())
+        .context("The Setup helper is missing from the app. Rebuild it with tools/build_macos.py.")?;
+    let mut open = std::process::Command::new("/usr/bin/open");
+    open.args(["-W", "-n"]);
+    if let Some(home) = std::env::var_os("LOOKING_GLASS_HOME") {
+        open.arg("--env").arg(format!("LOOKING_GLASS_HOME={}", home.to_string_lossy()));
+    }
+    let status = open.arg(&helper).args(["--args", "--from-game"]).status().context("open Setup")?;
+    anyhow::ensure!(status.success(), "Setup could not be opened.");
     Ok(())
 }
 

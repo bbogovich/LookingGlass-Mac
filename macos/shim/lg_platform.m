@@ -143,6 +143,11 @@ int32_t lg_set_window_pixels(uint32_t width, uint32_t height) {
     }
 }
 
+// True while the Option key is held (checked at launch to open Setup).
+int32_t lg_option_held(void) {
+    return (NSEvent.modifierFlags & NSEventModifierFlagOption) != 0 ? 1 : 0;
+}
+
 // True when this application is frontmost and owns the key window.
 int32_t lg_window_focused(void) {
     @autoreleasepool {

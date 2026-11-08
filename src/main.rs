@@ -22,6 +22,7 @@ mod character;
 mod cheshire;
 mod chess;
 mod cinematic;
+mod data_setup;
 mod clockwork;
 mod collision;
 mod combat;
@@ -159,6 +160,9 @@ fn main() {
 
 fn run() -> Result<()> {
     platform::init_working_dir()?;
+    if data_setup::command()? {
+        return Ok(()); // fork: data check/import commands for the setup helpers
+    }
     let mut o = Options {
         difficulty: Default::default(),
         save_dir: PathBuf::from("private/saves"),

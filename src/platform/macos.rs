@@ -19,6 +19,7 @@ extern "C" {
     fn lg_window_focused() -> i32;
     fn lg_display_refresh_hz() -> i32;
     fn lg_set_window_pixels(width: u32, height: u32) -> i32;
+    fn lg_option_held() -> i32;
 }
 
 /// Size the window content in framebuffer pixels, fitted to the screen. False when
@@ -48,6 +49,12 @@ pub fn pad_state(index: u32) -> Option<PadState> {
         rx: raw.rx,
         ry: raw.ry,
     })
+}
+
+/// Whether the Option key is held right now (used at launch to open Setup).
+pub fn option_held() -> bool {
+    // No arguments; reads the global modifier state, valid before NSApp exists.
+    unsafe { lg_option_held() == 1 }
 }
 
 pub fn window_focused() -> bool {
