@@ -13,7 +13,10 @@ ROOT_FILES = {
     "LEGAL.md", "LICENSE-MIT", "Setup.cmd", "CONTRIBUTING.md", "SECURITY.md",
     "THIRD_PARTY_NOTICES.txt", "build.rs",
 }
-SUFFIXES = {"src": {".rs", ".json"}, "docs": {".md"}, "tools": {".py", ".ps1", ".java", ".cmd", ".md"}}
+SUFFIXES = {
+    "src": {".rs", ".json"}, "docs": {".md"}, "tools": {".py", ".ps1", ".java", ".cmd", ".md"},
+    "macos": {".m", ".swift"},
+}
 # Authored public website files only; media retains its exact hash boundary.
 SITE_FILES = {
     "docs/site/index.html", "docs/site/styles.css", "docs/site/favicon.svg",

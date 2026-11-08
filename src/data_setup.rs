@@ -13,7 +13,7 @@
 //!   it. Progress is one JSON object per line; the last line has `"done"`.
 //! - `--set-language <code>`: switch the language of a managed installation.
 //!
-//! `--extractor <7zz>` and `--cancel-file <path>` apply to the last two. Cancelling
+//! `--extractor <bsdtar or 7zz>` and `--cancel-file <path>` apply to the last two. Cancelling
 //! (creating the cancel file) leaves the previous configuration and saves untouched.
 use anyhow::{bail, ensure, Context, Result};
 use serde::Serialize;
@@ -22,18 +22,24 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub const ARCHIVE_NAME: &str = "Alice1_2011_vanilla.7z";
-pub const ARCHIVE_URL: &str = "https://archive.org/download/alice_202106/Alice1_2011_vanilla.7z";
-pub const ARCHIVE_PAGE: &str = "https://archive.org/details/alice_202106";
-pub const ARCHIVE_BYTES: u64 = 977_811_158;
-pub const ARCHIVE_SHA256: &str = "b253bb2c9c875f1838a711d0fe4f12f4bc2c6207db3baae6431af962eca8705d";
+const ARCHIVE_NAME: &str = "Alice1_2011_vanilla.7z";
+const ARCHIVE_URL: &str = "https://archive.org/download/alice_202106/Alice1_2011_vanilla.7z";
+const ARCHIVE_PAGE: &str = "https://archive.org/details/alice_202106";
+const ARCHIVE_BYTES: u64 = 977_811_158;
+const ARCHIVE_SHA256: &str = "b253bb2c9c875f1838a711d0fe4f12f4bc2c6207db3baae6431af962eca8705d";
 
 /// Base packs, as in `Setup.cmd`. The 2000 CD release has no `pak5_mod.pk3`; the
 /// engine runs without it, so it is reported as a warning rather than refused.
 const REQUIRED: [&str; 4] = ["pak0.pk3", "pak1_large.pk3", "pak2.pk3", "pak3.pk3"];
 const MOD_PACK: &str = "pak5_mod.pk3";
 const MAP_COUNT: usize = 36;
-const SUFFIXES: [&str; 5] = ["", "base", "bin/base", "Alice1/bin/base", "alice_202106/Alice1/bin/base"];
+const SUFFIXES: [&str; 5] = [
+    "",
+    "base",
+    "bin/base",
+    "Alice1/bin/base",
+    "alice_202106/Alice1/bin/base",
+];
 
 struct Language {
     code: &'static str,
@@ -43,19 +49,54 @@ struct Language {
     word: &'static str,
 }
 const LANGUAGES: [Language; 5] = [
-    Language { code: "en", name: "English", file: "pak4_english.pk3", bundle: None, word: "step" },
-    Language { code: "de", name: "Deutsch", file: "pak4_german.pk3", bundle: Some("base_g.pk3"), word: "Schritt" },
-    Language { code: "fr", name: "Francais", file: "pak4_french.pk3", bundle: Some("base_f.pk3"), word: "pas" },
-    Language { code: "es", name: "Espanol", file: "pak4_spanish.pk3", bundle: Some("base_s.pk3"), word: "paso" },
-    Language { code: "nl", name: "Nederlands", file: "pak4_dutch.pk3", bundle: Some("base_d.pk3"), word: "Terug" },
+    Language {
+        code: "en",
+        name: "English",
+        file: "pak4_english.pk3",
+        bundle: None,
+        word: "step",
+    },
+    Language {
+        code: "de",
+        name: "Deutsch",
+        file: "pak4_german.pk3",
+        bundle: Some("base_g.pk3"),
+        word: "Schritt",
+    },
+    Language {
+        code: "fr",
+        name: "Francais",
+        file: "pak4_french.pk3",
+        bundle: Some("base_f.pk3"),
+        word: "pas",
+    },
+    Language {
+        code: "es",
+        name: "Espanol",
+        file: "pak4_spanish.pk3",
+        bundle: Some("base_s.pk3"),
+        word: "paso",
+    },
+    Language {
+        code: "nl",
+        name: "Nederlands",
+        file: "pak4_dutch.pk3",
+        bundle: Some("base_d.pk3"),
+        word: "Terug",
+    },
 ];
 
 fn language(code: &str) -> Result<&'static Language> {
-    LANGUAGES.iter().find(|l| l.code == code).with_context(|| format!("Unknown language: {code}"))
+    LANGUAGES
+        .iter()
+        .find(|l| l.code == code)
+        .with_context(|| format!("Unknown language: {code}"))
 }
 
 fn is_language_file(name: &str) -> bool {
-    LANGUAGES.iter().any(|l| name.eq_ignore_ascii_case(l.file) || l.bundle.is_some_and(|b| name.eq_ignore_ascii_case(b)))
+    LANGUAGES.iter().any(|l| {
+        name.eq_ignore_ascii_case(l.file) || l.bundle.is_some_and(|b| name.eq_ignore_ascii_case(b))
+    })
 }
 
 /// Dutch translates menus only, so it also needs English dialog.
@@ -70,17 +111,28 @@ fn required_languages(code: &str) -> Vec<&'static str> {
 /// Handle a setup command if the first argument is one. Returns true when handled.
 pub fn command() -> Result<bool> {
     let mut args = std::env::args().skip(1);
-    let Some(first) = args.next() else { return Ok(false) };
-    if !matches!(first.as_str(), "--setup-info" | "--check-data" | "--setup-data" | "--set-language") {
+    let Some(first) = args.next() else {
+        return Ok(false);
+    };
+    if !matches!(
+        first.as_str(),
+        "--setup-info" | "--check-data" | "--setup-data" | "--set-language"
+    ) {
         return Ok(false);
     }
     let mut positional = None;
     let mut opts = Options::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--language" => opts.language = Some(args.next().context("--language requires a code")?),
-            "--extractor" => opts.extractor = Some(args.next().context("--extractor requires a path")?.into()),
-            "--cancel-file" => opts.cancel = Some(args.next().context("--cancel-file requires a path")?.into()),
+            "--language" => {
+                opts.language = Some(args.next().context("--language requires a code")?)
+            }
+            "--extractor" => {
+                opts.extractor = Some(args.next().context("--extractor requires a path")?.into())
+            }
+            "--cancel-file" => {
+                opts.cancel = Some(args.next().context("--cancel-file requires a path")?.into())
+            }
             _ if positional.is_none() => positional = Some(arg),
             _ => bail!("Unexpected argument: {arg}"),
         }
@@ -123,7 +175,10 @@ impl Options {
 }
 
 fn print_json(value: &impl Serialize) {
-    println!("{}", serde_json::to_string(value).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}")));
+    println!(
+        "{}",
+        serde_json::to_string(value).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+    );
 }
 
 fn progress(message: &str, percent: Option<u8>) {
@@ -134,7 +189,9 @@ fn progress(message: &str, percent: Option<u8>) {
 fn finish(result: Result<Report>) {
     match result {
         Ok(report) => print_json(&serde_json::json!({ "done": true, "report": report })),
-        Err(error) => print_json(&serde_json::json!({ "done": false, "error": format!("{error:#}") })),
+        Err(error) => {
+            print_json(&serde_json::json!({ "done": false, "error": format!("{error:#}") }))
+        }
     }
 }
 
@@ -154,7 +211,10 @@ fn info() -> Info {
         page: ARCHIVE_PAGE,
         bytes: ARCHIVE_BYTES,
         sha256: ARCHIVE_SHA256,
-        languages: LANGUAGES.iter().map(|l| serde_json::json!({ "code": l.code, "name": l.name })).collect(),
+        languages: LANGUAGES
+            .iter()
+            .map(|l| serde_json::json!({ "code": l.code, "name": l.name }))
+            .collect(),
     }
 }
 
@@ -177,9 +237,16 @@ fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
     if exact.is_file() && exact.file_name().is_some_and(|n| n == name) {
         return Some(exact);
     }
-    fs::read_dir(dir).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).find(|p| {
-        p.is_file() && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.eq_ignore_ascii_case(name))
-    })
+    fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.is_file()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.eq_ignore_ascii_case(name))
+        })
 }
 
 fn has_core_packs(dir: &Path) -> bool {
@@ -188,16 +255,28 @@ fn has_core_packs(dir: &Path) -> bool {
 
 /// The base folder inside `folder` (accepting `Alice1`, its parent, `bin/base`...).
 fn find_base(folder: &Path, require_language: bool) -> Option<PathBuf> {
-    SUFFIXES.iter().map(|s| if s.is_empty() { folder.to_path_buf() } else { folder.join(s) }).find(|c| {
-        has_core_packs(c) && (!require_language || active_language(c, true).is_some())
-    })
+    SUFFIXES
+        .iter()
+        .map(|s| {
+            if s.is_empty() {
+                folder.to_path_buf()
+            } else {
+                folder.join(s)
+            }
+        })
+        .find(|c| has_core_packs(c) && (!require_language || active_language(c, true).is_some()))
 }
 
 /// Whether a language pack really is `code`, using the same marker words as Setup.cmd.
 fn check_language(path: &Path, code: &str) -> Result<()> {
     let lang = language(code)?;
-    let entry_name = if code == "nl" { "ui/main.urc" } else { "dialog/standard.tlk" };
-    let mut zip = zip::ZipArchive::new(File::open(path)?).with_context(|| format!("Invalid PK3: {}", path.display()))?;
+    let entry_name = if code == "nl" {
+        "ui/main.urc"
+    } else {
+        "dialog/standard.tlk"
+    };
+    let mut zip = zip::ZipArchive::new(File::open(path)?)
+        .with_context(|| format!("Invalid PK3: {}", path.display()))?;
     let name = zip
         .file_names()
         .find(|n| n.replace('\\', "/").eq_ignore_ascii_case(entry_name))
@@ -205,15 +284,26 @@ fn check_language(path: &Path, code: &str) -> Result<()> {
         .with_context(|| format!("{entry_name} is missing"))?;
     let mut text = Vec::new();
     zip.by_name(&name)?.take(16 << 20).read_to_end(&mut text)?;
-    let found = text.split(|&b| b == b'\n').map(|l| l.strip_suffix(b"\r").unwrap_or(l)).any(|line| {
-        if code == "nl" {
-            dutch_title(line, lang.word)
-        } else {
-            let lead = line.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(line.len());
-            !(line[lead..].starts_with(b"//") || line[lead..].starts_with(b"\"")) && has_word(line, lang.word)
-        }
-    });
-    ensure!(found, "Language pack does not match {code}: expected '{}' in {entry_name}", lang.word);
+    let found = text
+        .split(|&b| b == b'\n')
+        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+        .any(|line| {
+            if code == "nl" {
+                dutch_title(line, lang.word)
+            } else {
+                let lead = line
+                    .iter()
+                    .position(|b| !b.is_ascii_whitespace())
+                    .unwrap_or(line.len());
+                !(line[lead..].starts_with(b"//") || line[lead..].starts_with(b"\""))
+                    && has_word(line, lang.word)
+            }
+        });
+    ensure!(
+        found,
+        "Language pack does not match {code}: expected '{}' in {entry_name}",
+        lang.word
+    );
     Ok(())
 }
 
@@ -230,12 +320,19 @@ fn has_word(line: &[u8], word: &str) -> bool {
 
 /// `title "Terug"` (quotes and a trailing comment optional), case-insensitive.
 fn dutch_title(line: &[u8], word: &str) -> bool {
-    let Ok(line) = std::str::from_utf8(line) else { return false };
-    let line = line.split("//").next().unwrap_or("").trim();
-    let Some(rest) = line.get(..5).filter(|t| t.eq_ignore_ascii_case("title")).map(|_| &line[5..]) else {
+    let Ok(line) = std::str::from_utf8(line) else {
         return false;
     };
-    rest.starts_with(char::is_whitespace) && rest.trim().trim_matches('"').eq_ignore_ascii_case(word)
+    let line = line.split("//").next().unwrap_or("").trim();
+    let Some(rest) = line
+        .get(..5)
+        .filter(|t| t.eq_ignore_ascii_case("title"))
+        .map(|_| &line[5..])
+    else {
+        return false;
+    };
+    rest.starts_with(char::is_whitespace)
+        && rest.trim().trim_matches('"').eq_ignore_ascii_case(word)
 }
 
 /// The language the engine will use for `base`, following Setup.cmd: the last
@@ -260,7 +357,13 @@ fn active_language(base: &Path, include_loc: bool) -> Option<&'static str> {
         }
     }
     mounted.sort();
-    mounted.iter().rev().find(|(_, c)| *c != "en").or(mounted.last()).map(|(_, c)| *c).or(fallback)
+    mounted
+        .iter()
+        .rev()
+        .find(|(_, c)| *c != "en")
+        .or(mounted.last())
+        .map(|(_, c)| *c)
+        .or(fallback)
 }
 
 /// Structural check of a base folder: packs, the 36 maps, and the FAKK 42 format.
@@ -271,7 +374,9 @@ fn inspect(base: &Path, report: &mut Report) {
     for name in REQUIRED {
         match find_file(base, name) {
             Some(path) => packs.push(path),
-            None => report.problems.push(format!("Missing {name}. Choose the Alice1 game folder or {ARCHIVE_NAME}.")),
+            None => report.problems.push(format!(
+                "Missing {name}. Choose the Alice1 game folder or {ARCHIVE_NAME}."
+            )),
         }
     }
     match find_file(base, MOD_PACK) {
@@ -281,15 +386,24 @@ fn inspect(base: &Path, report: &mut Report) {
         )),
     }
     for path in packs {
-        let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-        let mut zip = match File::open(&path).map_err(anyhow::Error::from).and_then(|f| Ok(zip::ZipArchive::new(f)?)) {
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let mut zip = match File::open(&path)
+            .map_err(anyhow::Error::from)
+            .and_then(|f| Ok(zip::ZipArchive::new(f)?))
+        {
             Ok(zip) if zip.len() > 0 => zip,
             Ok(_) => {
                 report.problems.push(format!("Empty game archive: {name}"));
                 continue;
             }
             Err(e) => {
-                report.problems.push(format!("Unreadable game archive {name}: {e}"));
+                report
+                    .problems
+                    .push(format!("Unreadable game archive {name}: {e}"));
                 continue;
             }
         };
@@ -299,11 +413,19 @@ fn inspect(base: &Path, report: &mut Report) {
             if entry.starts_with("maps/") && entry.ends_with(".bsp") && !entry[5..].contains('/') {
                 if entry == "maps/gvillage.bsp" {
                     let mut header = [0u8; 8];
-                    let ok = zip.by_name(&original).ok().is_some_and(|mut e| e.read_exact(&mut header).is_ok());
-                    if ok && &header[..4] == b"FAKK" && i32::from_le_bytes(header[4..].try_into().unwrap()) == 42 {
+                    let ok = zip
+                        .by_name(&original)
+                        .ok()
+                        .is_some_and(|mut e| e.read_exact(&mut header).is_ok());
+                    if ok
+                        && &header[..4] == b"FAKK"
+                        && i32::from_le_bytes(header[4..].try_into().unwrap()) == 42
+                    {
                         village = true;
                     } else {
-                        report.problems.push("The village map is not the supported FAKK version 42.".into());
+                        report
+                            .problems
+                            .push("The village map is not the supported FAKK version 42.".into());
                     }
                 }
                 maps.insert(entry);
@@ -312,14 +434,19 @@ fn inspect(base: &Path, report: &mut Report) {
     }
     report.maps = maps.len();
     if report.problems.is_empty() && (!village || maps.len() != MAP_COUNT) {
-        report.problems.push(format!("Expected the {MAP_COUNT}-map data set; found {} maps.", maps.len()));
+        report.problems.push(format!(
+            "Expected the {MAP_COUNT}-map data set; found {} maps.",
+            maps.len()
+        ));
     }
 }
 
 /// Where a base folder's language packs can be: beside the core packs, in the 2011
 /// `loc` folder, or in the `languages` folder next to it (an app bundle's data).
 fn language_places(base: &Path) -> [PathBuf; 3] {
-    let beside = base.parent().map_or_else(|| base.join("languages"), |p| p.join("languages"));
+    let beside = base
+        .parent()
+        .map_or_else(|| base.join("languages"), |p| p.join("languages"));
     [base.to_path_buf(), base.join("loc"), beside]
 }
 
@@ -347,12 +474,19 @@ fn check_folder(folder: &Path) -> Report {
         .collect();
     report.language = active_language(&base, false);
     if report.language.is_none() {
-        report.problems.push("Missing a supported language pack (pak4_english.pk3 or a translation).".into());
+        report
+            .problems
+            .push("Missing a supported language pack (pak4_english.pk3 or a translation).".into());
     }
     // Only an import in private/game-data can be changed in place; packs inside an
     // app bundle are read-only (changing them would break its signature).
-    let parts: Vec<_> = base.components().map(|c| c.as_os_str().to_owned()).collect();
-    report.managed = parts.windows(2).any(|w| w[0] == "private" && w[1] == "game-data");
+    let parts: Vec<_> = base
+        .components()
+        .map(|c| c.as_os_str().to_owned())
+        .collect();
+    report.managed = parts
+        .windows(2)
+        .any(|w| w[0] == "private" && w[1] == "game-data");
     report.base = Some(base.display().to_string());
     report.ok = report.problems.is_empty();
     report
@@ -366,30 +500,44 @@ fn check_configured(root: &Path) -> Report {
             // Languages cached in private/game-data/languages are switchable too.
             for lang in &LANGUAGES {
                 let cached = root.join("private/game-data/languages").join(lang.file);
-                if !report.languages.contains(&lang.code) && check_language(&cached, lang.code).is_ok() {
+                if !report.languages.contains(&lang.code)
+                    && check_language(&cached, lang.code).is_ok()
+                {
                     report.languages.push(lang.code);
                 }
             }
             report
         }
-        None => Report { problems: vec!["No game data is configured yet.".into()], ..Default::default() },
+        None => Report {
+            problems: vec!["No game data is configured yet.".into()],
+            ..Default::default()
+        },
     }
 }
 
 fn configured_base(root: &Path) -> Option<PathBuf> {
     let text = fs::read_to_string(root.join("private/data-path.txt")).ok()?;
     let path = PathBuf::from(text.trim());
-    (!text.trim().is_empty()).then(|| if path.is_absolute() { path } else { root.join(path) })
+    (!text.trim().is_empty()).then(|| {
+        if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        }
+    })
 }
 
 /// True when `ok` data is configured: what the macOS launcher checks before playing.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn configured_ok(root: &Path) -> bool {
-    configured_base(root).is_some_and(|base| has_core_packs(&base) && active_language(&base, false).is_some())
+    configured_base(root)
+        .is_some_and(|base| has_core_packs(&base) && active_language(&base, false).is_some())
 }
 
 fn unique(dir: &Path, prefix: &str) -> PathBuf {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
     dir.join(format!("{prefix}{:x}{:x}", nanos, std::process::id()))
 }
 
@@ -436,15 +584,27 @@ enum Tool {
 
 fn tool(opts: &Options) -> Result<Tool> {
     if let Some(path) = &opts.extractor {
-        let tar = path.file_name().is_some_and(|n| n.to_string_lossy().contains("tar"));
-        return Ok(if tar { Tool::Bsdtar(path.clone()) } else { Tool::SevenZip(path.clone()) });
+        let tar = path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().contains("tar"));
+        return Ok(if tar {
+            Tool::Bsdtar(path.clone())
+        } else {
+            Tool::SevenZip(path.clone())
+        });
     }
     let dirs: Vec<PathBuf> = std::iter::once(PathBuf::from("/usr/bin"))
-        .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()))
+        .chain(std::env::split_paths(
+            &std::env::var_os("PATH").unwrap_or_default(),
+        ))
         .collect();
     for name in ["bsdtar", "7zz", "7z"] {
         if let Some(path) = dirs.iter().map(|d| d.join(name)).find(|p| p.is_file()) {
-            return Ok(if name == "bsdtar" { Tool::Bsdtar(path) } else { Tool::SevenZip(path) });
+            return Ok(if name == "bsdtar" {
+                Tool::Bsdtar(path)
+            } else {
+                Tool::SevenZip(path)
+            });
         }
     }
     bail!("Cannot read .7z archives here (no bsdtar or 7-Zip found). Extract the archive and choose its folder instead.")
@@ -466,15 +626,31 @@ fn fields(line: &str, n: usize) -> Option<(Vec<&str>, &str)> {
 fn archive_entries(source: &Path, zip_archive: bool, opts: &Options) -> Result<Vec<(String, u64)>> {
     if zip_archive {
         let mut zip = zip::ZipArchive::new(File::open(source)?)?;
-        return (0..zip.len()).map(|i| zip.by_index_raw(i).map(|e| (e.name().to_owned(), e.size())).map_err(Into::into)).collect();
+        return (0..zip.len())
+            .map(|i| {
+                zip.by_index_raw(i)
+                    .map(|e| (e.name().to_owned(), e.size()))
+                    .map_err(Into::into)
+            })
+            .collect();
     }
     let (program, args): (PathBuf, &[&str]) = match tool(opts)? {
         Tool::Bsdtar(path) => (path, &["-tvf"]),
         Tool::SevenZip(path) => (path, &["l", "-slt", "-ba", "--"]),
     };
-    let tar = program.file_name().is_some_and(|n| n.to_string_lossy().contains("tar"));
-    let out = Command::new(&program).args(args).arg(source).output().context("list the archive")?;
-    ensure!(out.status.success(), "Cannot list archive: {}", String::from_utf8_lossy(&out.stderr).trim());
+    let tar = program
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().contains("tar"));
+    let out = Command::new(&program)
+        .args(args)
+        .arg(source)
+        .output()
+        .context("list the archive")?;
+    ensure!(
+        out.status.success(),
+        "Cannot list archive: {}",
+        String::from_utf8_lossy(&out.stderr).trim()
+    );
     let text = String::from_utf8_lossy(&out.stdout);
     if tar {
         // drwxr-xr-x  0 0      0   289276327 Jun 15  2011 Alice1/bin/base/pak0.pk3
@@ -489,7 +665,8 @@ fn archive_entries(source: &Path, zip_archive: bool, opts: &Options) -> Result<V
     for line in text.lines() {
         if let Some(path) = line.strip_prefix("Path = ") {
             entries.push((path.to_owned(), 0));
-        } else if let (Some(size), Some(last)) = (line.strip_prefix("Size = "), entries.last_mut()) {
+        } else if let (Some(size), Some(last)) = (line.strip_prefix("Size = "), entries.last_mut())
+        {
             last.1 = size.trim().parse().unwrap_or(0);
         }
     }
@@ -499,22 +676,45 @@ fn archive_entries(source: &Path, zip_archive: bool, opts: &Options) -> Result<V
 /// Extract only the packs setup needs, flat into `dest`. Exact entry names and flat
 /// extraction exclude executables, scripts and traversal paths, as on Windows.
 fn extract(source: &Path, dest: &Path, opts: &Options) -> Result<()> {
-    let zip_archive = source.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+    let zip_archive = source
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"));
     let entries = archive_entries(source, zip_archive, opts)?;
-    let find = |name: &str| entries.iter().find(|(e, _)| e.replace('\\', "/").eq_ignore_ascii_case(name)).cloned();
-    let prefix = ["", "base/", "bin/base/", "Alice1/bin/base/", "alice_202106/Alice1/bin/base/"]
-        .into_iter()
-        .find(|p| find(&format!("{p}pak0.pk3")).is_some())
-        .context("No supported base folder in the archive.")?;
+    let find = |name: &str| {
+        entries
+            .iter()
+            .find(|(e, _)| e.replace('\\', "/").eq_ignore_ascii_case(name))
+            .cloned()
+    };
+    let prefix = [
+        "",
+        "base/",
+        "bin/base/",
+        "Alice1/bin/base/",
+        "alice_202106/Alice1/bin/base/",
+    ]
+    .into_iter()
+    .find(|p| find(&format!("{p}pak0.pk3")).is_some())
+    .context("No supported base folder in the archive.")?;
     let mut wanted = Vec::new();
-    for name in REQUIRED.iter().copied().chain([MOD_PACK]).chain(LANGUAGES.iter().map(|l| l.file)) {
+    for name in REQUIRED
+        .iter()
+        .copied()
+        .chain([MOD_PACK])
+        .chain(LANGUAGES.iter().map(|l| l.file))
+    {
         wanted.extend(find(&format!("{prefix}{name}")));
     }
     for name in LANGUAGES.iter().filter_map(|l| l.bundle) {
-        wanted.extend(find(&format!("{prefix}{name}")).or_else(|| find(&format!("{prefix}loc/{name}"))));
+        wanted.extend(
+            find(&format!("{prefix}{name}")).or_else(|| find(&format!("{prefix}loc/{name}"))),
+        );
     }
     let flat = |name: &str| -> Result<std::ffi::OsString> {
-        Ok(Path::new(&name.replace('\\', "/")).file_name().context("bad archive entry")?.to_owned())
+        Ok(Path::new(&name.replace('\\', "/"))
+            .file_name()
+            .context("bad archive entry")?
+            .to_owned())
     };
     progress("Unpacking game files. This may take a few minutes...", None);
     if zip_archive {
@@ -534,17 +734,29 @@ fn extract(source: &Path, dest: &Path, opts: &Options) -> Result<()> {
     let mut command = match tool(opts)? {
         Tool::Bsdtar(path) => {
             let mut c = Command::new(path);
-            c.arg("-xf").arg(source).arg("-C").arg(&staging).args(&names);
+            c.arg("-xf")
+                .arg(source)
+                .arg("-C")
+                .arg(&staging)
+                .args(&names);
             c
         }
         Tool::SevenZip(path) => {
             let mut c = Command::new(path);
-            c.args(["x", "-y", "-bso0", "-bsp0"]).arg(format!("-o{}", staging.display())).arg("--").arg(source).args(&names);
+            c.args(["x", "-y", "-bso0", "-bsp0"])
+                .arg(format!("-o{}", staging.display()))
+                .arg("--")
+                .arg(source)
+                .args(&names);
             c
         }
     };
     let result = (|| -> Result<()> {
-        let mut child = command.stdout(Stdio::null()).stderr(Stdio::piped()).spawn().context("start the archive tool")?;
+        let mut child = command
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("start the archive tool")?;
         let total = wanted.iter().map(|(_, size)| size).sum::<u64>().max(1);
         let mut last = None;
         let status = loop {
@@ -556,7 +768,11 @@ fn extract(source: &Path, dest: &Path, opts: &Options) -> Result<()> {
                 let _ = child.wait();
                 opts.check_cancel()?;
             }
-            let done: u64 = names.iter().filter_map(|n| fs::metadata(staging.join(n)).ok()).map(|m| m.len()).sum();
+            let done: u64 = names
+                .iter()
+                .filter_map(|n| fs::metadata(staging.join(n)).ok())
+                .map(|m| m.len())
+                .sum();
             let pct = Some((done * 100 / total).min(100) as u8);
             if pct != last {
                 progress("Unpacking game files...", pct);
@@ -585,7 +801,9 @@ fn extract(source: &Path, dest: &Path, opts: &Options) -> Result<()> {
 
 /// Import `source` (a game folder or a .7z/.zip archive) into `private/game-data`.
 fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
-    let source = source.canonicalize().with_context(|| format!("Cannot open {}", source.display()))?;
+    let source = source
+        .canonicalize()
+        .with_context(|| format!("Cannot open {}", source.display()))?;
     let game_data = root.join("private/game-data");
     let cache = game_data.join("languages");
     fs::create_dir_all(&cache)?;
@@ -596,8 +814,15 @@ fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
                 "No complete game data in that folder. Choose the Alice1 folder or its bin/base folder.",
             )?
         } else {
-            let ext = source.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-            ensure!(ext == "7z" || ext == "zip", "Choose a .7z or .zip archive, or an extracted game folder.");
+            let ext = source
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            ensure!(
+                ext == "7z" || ext == "zip",
+                "Choose a .7z or .zip archive, or an extracted game folder."
+            );
             let size = fs::metadata(&source)?.len();
             if size == ARCHIVE_BYTES {
                 ensure!(
@@ -637,7 +862,11 @@ fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
             // A folder keeps the language it was installed with. An archive holds
             // every translation flat, where the last one alphabetically (Spanish)
             // would win, so it starts in English unless a language is chosen.
-            None if staged == import && check_language(&cache.join(LANGUAGES[0].file), "en").is_ok() => "en",
+            None if staged == import
+                && check_language(&cache.join(LANGUAGES[0].file), "en").is_ok() =>
+            {
+                "en"
+            }
             None => active_language(&staged, true).context("Missing a supported language pack.")?,
         };
         opts.check_cancel()?;
@@ -649,7 +878,10 @@ fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
             fs::create_dir_all(&import)?;
             for entry in fs::read_dir(&staged)?.filter_map(|e| e.ok()) {
                 let name = entry.file_name().to_string_lossy().into_owned();
-                if name.to_ascii_lowercase().ends_with(".pk3") && !is_language_file(&name) && entry.path().is_file() {
+                if name.to_ascii_lowercase().ends_with(".pk3")
+                    && !is_language_file(&name)
+                    && entry.path().is_file()
+                {
                     opts.check_cancel()?;
                     fs::copy(entry.path(), import.join(&name))?;
                 }
@@ -662,17 +894,26 @@ fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
 
         // Commit: point the game at the new import, then drop the previous import.
         let previous = configured_base(root).filter(|b| b.starts_with(&game_data));
-        let relative = import.strip_prefix(root).unwrap_or(&import).display().to_string();
+        let relative = import
+            .strip_prefix(root)
+            .unwrap_or(&import)
+            .display()
+            .to_string();
         let receipt = serde_json::json!({ "schema": 1, "source": source.display().to_string(), "dataPath": relative });
         save_text(&root.join("private/setup.json"), &format!("{receipt:#}\n"))?;
-        save_text(&root.join("private/data-path.txt"), &format!("{relative}\n"))?;
+        save_text(
+            &root.join("private/data-path.txt"),
+            &format!("{relative}\n"),
+        )?;
         if let Some(old) = previous.and_then(|b| b.parent().map(Path::to_path_buf)) {
             if old != import.parent().unwrap_or(&import) && old.starts_with(&game_data) {
                 let _ = fs::remove_dir_all(old);
             }
         }
         for lang in &LANGUAGES {
-            if !report.languages.contains(&lang.code) && check_language(&cache.join(lang.file), lang.code).is_ok() {
+            if !report.languages.contains(&lang.code)
+                && check_language(&cache.join(lang.file), lang.code).is_ok()
+            {
                 report.languages.push(lang.code);
             }
         }
@@ -695,8 +936,12 @@ fn apply_language(base: &Path, cache: &Path, code: &str) -> Result<()> {
     for need in required_languages(code) {
         let lang = language(need)?;
         let cached = cache.join(lang.file);
-        check_language(&cached, need)
-            .with_context(|| format!("The {} language pack is not available. Choose a source that contains it.", lang.name))?;
+        check_language(&cached, need).with_context(|| {
+            format!(
+                "The {} language pack is not available. Choose a source that contains it.",
+                lang.name
+            )
+        })?;
         let temp = txn.join(format!("selected-{need}.tmp"));
         fs::copy(&cached, &temp)?;
         prepared.push((temp, base.join(lang.file)));
@@ -737,7 +982,10 @@ fn set_language(root: &Path, code: &str, opts: &Options) -> Result<Report> {
         base.starts_with(&game_data),
         "This installation uses an outside folder. Import it with Setup first, then change the language."
     );
-    ensure!(active_language(&base, false) != Some(code), "That language is already active.");
+    ensure!(
+        active_language(&base, false) != Some(code),
+        "That language is already active."
+    );
     opts.check_cancel()?;
     let cache = game_data.join("languages");
     // Cache whatever is mounted now, so switching back never needs the source again.
@@ -767,7 +1015,11 @@ mod tests {
     fn pack(path: &Path, files: &[(&str, &[u8])]) {
         let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
         for (name, data) in files {
-            zip.start_file(*name, FileOptions::default().compression_method(zip::CompressionMethod::Stored)).unwrap();
+            zip.start_file(
+                *name,
+                FileOptions::default().compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
             zip.write_all(data).unwrap();
         }
         zip.finish().unwrap();
@@ -779,9 +1031,14 @@ mod tests {
         fs::create_dir_all(&base).unwrap();
         let mut header = b"FAKK".to_vec();
         header.extend(42i32.to_le_bytes());
-        let mut maps: Vec<(String, Vec<u8>)> = (0..35).map(|i| (format!("maps/m{i}.bsp"), vec![0])).collect();
+        let mut maps: Vec<(String, Vec<u8>)> = (0..35)
+            .map(|i| (format!("maps/m{i}.bsp"), vec![0]))
+            .collect();
         maps.push(("maps/gvillage.bsp".into(), header));
-        let files: Vec<(&str, &[u8])> = maps.iter().map(|(n, d)| (n.as_str(), d.as_slice())).collect();
+        let files: Vec<(&str, &[u8])> = maps
+            .iter()
+            .map(|(n, d)| (n.as_str(), d.as_slice()))
+            .collect();
         pack(&base.join("pak0.pk3"), &files);
         for name in ["pak1_large.pk3", "Pak2.pk3", "Pak3.pk3"] {
             pack(&base.join(name), &[("x.txt", b"synthetic")]);
@@ -789,7 +1046,13 @@ mod tests {
         if with_mod {
             pack(&base.join("pak5_mod.pk3"), &[("x.txt", b"synthetic")]);
         }
-        pack(&base.join("pak4_english.pk3"), &[("dialog/standard.tlk", b"TALK\n\"sound/step.wav\"\nA first step.\n")]);
+        pack(
+            &base.join("pak4_english.pk3"),
+            &[(
+                "dialog/standard.tlk",
+                b"TALK\n\"sound/step.wav\"\nA first step.\n",
+            )],
+        );
         base
     }
 
@@ -811,8 +1074,15 @@ mod tests {
 
     #[test]
     fn bsdtar_listings_keep_names_with_spaces() {
-        let (f, name) = fields("-rw-r--r--  0 0      0   289276327 Jun 15  2011 Alice1/bin/base/My Pack.pk3", 8).unwrap();
-        assert_eq!((f[0], f[4], name), ("-rw-r--r--", "289276327", "Alice1/bin/base/My Pack.pk3"));
+        let (f, name) = fields(
+            "-rw-r--r--  0 0      0   289276327 Jun 15  2011 Alice1/bin/base/My Pack.pk3",
+            8,
+        )
+        .unwrap();
+        assert_eq!(
+            (f[0], f[4], name),
+            ("-rw-r--r--", "289276327", "Alice1/bin/base/My Pack.pk3")
+        );
         assert!(fields("too short", 8).is_none());
     }
 
@@ -825,15 +1095,26 @@ mod tests {
         assert!(report.ok, "{report:?}");
         assert_eq!(report.maps, 36);
         assert_eq!(report.language, Some("en"));
-        assert_eq!(report.warnings.len(), 1, "missing pak5_mod is only a warning");
+        assert_eq!(
+            report.warnings.len(),
+            1,
+            "missing pak5_mod is only a warning"
+        );
 
         let report = setup(&root, &data, &Options::default()).unwrap();
         assert!(report.ok && report.managed, "{report:?}");
         assert!(configured_ok(&root));
         let base = configured_base(&root).unwrap();
         assert!(find_file(&base, "pak2.pk3").is_some());
-        assert!(root.join("private/game-data/languages/pak4_english.pk3").is_file());
-        assert_eq!(set_language(&root, "en", &Options::default()).unwrap_err().to_string(), "That language is already active.");
+        assert!(root
+            .join("private/game-data/languages/pak4_english.pk3")
+            .is_file());
+        assert_eq!(
+            set_language(&root, "en", &Options::default())
+                .unwrap_err()
+                .to_string(),
+            "That language is already active."
+        );
         // A second import replaces the first and removes it.
         let first = base.parent().unwrap().to_path_buf();
         setup(&root, &data, &Options::default()).unwrap();
@@ -847,15 +1128,28 @@ mod tests {
         let root = temp("lang");
         let data = temp("lang-src");
         let base = make_data(&data, true);
-        pack(&base.join("pak4_dutch.pk3"), &[("ui/main.urc", b"title \"Terug\"\n")]);
-        let report = setup(&root, &data, &Options { language: Some("en".into()), ..Default::default() }).unwrap();
+        pack(
+            &base.join("pak4_dutch.pk3"),
+            &[("ui/main.urc", b"title \"Terug\"\n")],
+        );
+        let report = setup(
+            &root,
+            &data,
+            &Options {
+                language: Some("en".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(report.language, Some("en"));
         assert!(report.languages.contains(&"nl"));
         assert!(set_language(&root, "de", &Options::default()).is_err());
         let report = set_language(&root, "nl", &Options::default()).unwrap();
         assert_eq!(report.language, Some("nl"));
         let managed = configured_base(&root).unwrap();
-        assert!(managed.join("pak4_english.pk3").is_file() && managed.join("pak4_dutch.pk3").is_file());
+        assert!(
+            managed.join("pak4_english.pk3").is_file() && managed.join("pak4_dutch.pk3").is_file()
+        );
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(data);
     }
@@ -868,13 +1162,22 @@ mod tests {
         let base = make_data(&source, true);
         fs::create_dir_all(bundle.join("languages")).unwrap();
         fs::rename(&base, bundle.join("base")).unwrap();
-        pack(&bundle.join("languages/pak4_dutch.pk3"), &[("ui/main.urc", b"title \"Terug\"\n")]);
+        pack(
+            &bundle.join("languages/pak4_dutch.pk3"),
+            &[("ui/main.urc", b"title \"Terug\"\n")],
+        );
         let report = check_folder(&bundle.join("base"));
         assert!(report.ok && !report.managed, "{report:?}");
         assert!(report.languages.contains(&"nl"), "{report:?}");
-        let options = Options { language: Some("nl".into()), ..Default::default() };
+        let options = Options {
+            language: Some("nl".into()),
+            ..Default::default()
+        };
         let report = setup(&root, &bundle.join("base"), &options).unwrap();
-        assert!(report.managed && report.language == Some("nl"), "{report:?}");
+        assert!(
+            report.managed && report.language == Some("nl"),
+            "{report:?}"
+        );
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(source);
     }
@@ -888,19 +1191,51 @@ mod tests {
         let mut files: Vec<(String, Vec<u8>)> = fs::read_dir(&base)
             .unwrap()
             .map(|e| e.unwrap().path())
-            .map(|p| (format!("Alice1/bin/base/{}", p.file_name().unwrap().to_string_lossy()), fs::read(&p).unwrap()))
+            .map(|p| {
+                (
+                    format!(
+                        "Alice1/bin/base/{}",
+                        p.file_name().unwrap().to_string_lossy()
+                    ),
+                    fs::read(&p).unwrap(),
+                )
+            })
             .collect();
         files.push(("Alice1/bin/alice.exe".into(), b"not imported".to_vec()));
-        files.push(("Alice1/bin/base/../../evil.pk3".into(), b"not imported".to_vec()));
-        pack(&archive, &files.iter().map(|(n, d)| (n.as_str(), d.as_slice())).collect::<Vec<_>>());
+        files.push((
+            "Alice1/bin/base/../../evil.pk3".into(),
+            b"not imported".to_vec(),
+        ));
+        pack(
+            &archive,
+            &files
+                .iter()
+                .map(|(n, d)| (n.as_str(), d.as_slice()))
+                .collect::<Vec<_>>(),
+        );
         let report = setup(&root, &archive, &Options::default()).unwrap();
         assert!(report.ok, "{report:?}");
         let mut names: Vec<_> = fs::read_dir(configured_base(&root).unwrap())
             .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().to_ascii_lowercase())
+            .map(|e| {
+                e.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+            })
             .collect();
         names.sort();
-        assert_eq!(names, ["pak0.pk3", "pak1_large.pk3", "pak2.pk3", "pak3.pk3", "pak4_english.pk3", "pak5_mod.pk3"]);
+        assert_eq!(
+            names,
+            [
+                "pak0.pk3",
+                "pak1_large.pk3",
+                "pak2.pk3",
+                "pak3.pk3",
+                "pak4_english.pk3",
+                "pak5_mod.pk3"
+            ]
+        );
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(data);
     }
@@ -916,11 +1251,25 @@ mod tests {
         let base = make_data(&data, true);
         let cancel = root.join("cancel");
         fs::write(&cancel, "").unwrap();
-        assert!(setup(&root, &base, &Options { cancel: Some(cancel), ..Default::default() }).is_err());
+        assert!(setup(
+            &root,
+            &base,
+            &Options {
+                cancel: Some(cancel),
+                ..Default::default()
+            }
+        )
+        .is_err());
         assert!(!root.join("private/data-path.txt").exists());
-        let leftovers = fs::read_dir(root.join("private/game-data")).unwrap().filter(|e| {
-            e.as_ref().unwrap().file_name().to_string_lossy().starts_with("import-")
-        });
+        let leftovers = fs::read_dir(root.join("private/game-data"))
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("import-")
+            });
         assert_eq!(leftovers.count(), 0);
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(data);

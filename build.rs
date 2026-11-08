@@ -13,7 +13,7 @@ fn main() {
         println!("cargo:rustc-link-arg={arg}");
     }
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        macos_shim(); // macOS port: see macos/shim/lg_platform.m
+        macos_shim(); // fork: see macos/shim/lg_platform.m
     }
 }
 
@@ -33,15 +33,21 @@ fn macos_shim() {
     let min = std::env::var("MACOSX_DEPLOYMENT_TARGET").unwrap_or_else(|_| "11.0".into());
     let object = out.join("lg_platform.o");
     let run = |command: &mut Command| {
-        let status = command.status().unwrap_or_else(|e| panic!("run {command:?}: {e}"));
+        let status = command
+            .status()
+            .unwrap_or_else(|e| panic!("run {command:?}: {e}"));
         assert!(status.success(), "{command:?} failed with {status}");
     };
-    run(Command::new("xcrun").args(["clang", "-c", "-fobjc-arc", "-O2", "-Wall"])
+    run(Command::new("xcrun")
+        .args(["clang", "-c", "-fobjc-arc", "-O2", "-Wall"])
         .args(["-target", &format!("{arch}-apple-macos{min}")])
         .arg(source)
         .arg("-o")
         .arg(&object));
-    run(Command::new("xcrun").args(["ar", "crs"]).arg(out.join("liblg_platform.a")).arg(&object));
+    run(Command::new("xcrun")
+        .args(["ar", "crs"])
+        .arg(out.join("liblg_platform.a"))
+        .arg(&object));
     println!("cargo:rustc-link-search=native={}", out.display());
     println!("cargo:rustc-link-lib=static=lg_platform");
     for framework in ["GameController", "AppKit", "Foundation"] {

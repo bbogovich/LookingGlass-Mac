@@ -83,10 +83,10 @@ def info_plist(executable, name, identifier, icon):
     return plist
 
 
-def write_app_skeleton(app, executable, source, name, identifier, icon):
+def write_app(app, executable, source, name, identifier, icon):
     contents = app / "Contents"
     (contents / "MacOS").mkdir(parents=True)
-    (contents / "Resources").mkdir()
+    (contents / "Resources").mkdir(exist_ok=True)
     shutil.copy2(source, contents / "MacOS" / executable)
     with open(contents / "Info.plist", "wb") as file:
         plistlib.dump(info_plist(executable, name, identifier, icon is not None), file)
@@ -181,13 +181,8 @@ def main():
     icon = make_icon(base) if base else None
 
     helper = contents / "Helpers" / "Looking Glass Setup.app"
-    write_app_skeleton(helper, "LookingGlassSetup", helper_exe, "Looking Glass Setup", BUNDLE_ID + ".setup", icon)
-    (contents / "MacOS").mkdir()
-    shutil.copy2(engine, contents / "MacOS" / "looking-glass")
-    with open(contents / "Info.plist", "wb") as file:
-        plistlib.dump(info_plist("looking-glass", "Looking Glass", BUNDLE_ID, icon is not None), file)
-    if icon:
-        shutil.copy2(icon, resources / "AppIcon.icns")
+    write_app(helper, "LookingGlassSetup", helper_exe, "Looking Glass Setup", BUNDLE_ID + ".setup", icon)
+    write_app(APP, "looking-glass", engine, "Looking Glass", BUNDLE_ID, icon)
     for notice in ("LEGAL.md", "THIRD_PARTY_NOTICES.txt"):
         if (ROOT / notice).is_file():
             shutil.copy2(ROOT / notice, resources / notice)

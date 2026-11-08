@@ -64,7 +64,11 @@ fn gap_below(world: &World, feet: Vec3) -> f32 {
 }
 
 fn smooth(current: f32, target: f32, dt: f32) -> f32 {
-    let dt = if dt.is_finite() { dt.clamp(0., 0.1) } else { 0. };
+    let dt = if dt.is_finite() {
+        dt.clamp(0., 0.1)
+    } else {
+        0.
+    };
     current + (target - current) * (1. - (-RATE * dt).exp())
 }
 

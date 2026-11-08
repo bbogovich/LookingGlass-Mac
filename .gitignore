@@ -8,7 +8,6 @@
 /downloads/
 /data/
 /Alice1/
-/Alice1_2001/
 # Local planning documents for the macOS port; never committed.
 /.plan/
 # SwiftPM build output for the macOS Setup helper.
