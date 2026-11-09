@@ -74,8 +74,14 @@ fn steer(r: &mut Route, goal: Vec3, jump: bool) -> Result<()> {
         }
         let leap = jump && !jumped && r.player.grounded;
         jumped |= leap;
+        // fork: brake in the air as beyond_route does; full steering overshoots the far platform.
+        let pace = if r.player.grounded {
+            1.
+        } else {
+            ((2. * 420. * d.length()).sqrt() / 320.).min(1.) * 0.95
+        };
         r.tick(Controls {
-            wish: d.normalize_or_zero(),
+            wish: d.normalize_or_zero() * pace,
             run: true,
             jump: leap || r.player.ledge.as_ref().is_some_and(|h| !h.pulling),
             ..Default::default()

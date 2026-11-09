@@ -62,6 +62,7 @@ fn enter(i: &mut Interactions, map: &Bsp, w: &mut World, p: &mut Player, kind: K
         .context("Garden approach has no support")?;
     p.feet = feet;
     p.grounded = true;
+    p.check_pace = true; // fork: plain walking stalls on the slope's edge before this trigger
     let direction = (pos - feet).truncate().normalize_or_zero();
     for _ in 0..240 {
         let before = p.feet;

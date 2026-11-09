@@ -2493,7 +2493,8 @@ fn check_school_floor(assets: &mut crate::assets::Assets, map: &Bsp) -> Result<(
         for fps in [30, 60, 144] {
             let mut p = Player::spawn(&world, vec3(-3580., 2432., -624. + 48.)).unwrap();
             let mut clock = FixedClock::default();
-            for _ in 0..fps * 2 {
+            // Walk far enough to cross the whole steam floor at 104 units/s.
+            for _ in 0..fps * 4 {
                 clock.advance(
                     1. / fps as f64,
                     &world,

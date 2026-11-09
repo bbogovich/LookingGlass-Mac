@@ -310,7 +310,8 @@ pub fn check(assets: &mut Assets) -> Result<()> {
         // Real geometry: approach the fully extended lowest step and walk up the tiers.
         player = Player::new(vec3(2180., -2560., 16.1));
         let mut clock = FixedClock::default();
-        for _ in 0..fps * 2 {
+        // Walk far enough to reach the upper tiers at 104 units/s.
+        for _ in 0..fps * 4 {
             clock.advance(
                 1. / fps as f64,
                 &world,

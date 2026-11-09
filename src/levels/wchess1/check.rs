@@ -210,7 +210,7 @@ pub(crate) fn drive(r: &mut crate::route::Route) -> Result<()> {
                 board_route(r, Piece::Knight, KNIGHT)?;
             }
             std::fs::write(
-                "C:/DEV/McGee/private/wchess1/probe-checkpoint.json",
+                "private/wchess1/probe-checkpoint.json",
                 serde_json::to_vec(&r.checkpoint())?,
             )?;
             println!(
@@ -529,8 +529,9 @@ pub(super) fn survey(a: &mut Assets) -> Result<()> {
     use std::io::Write;
     let map = Bsp::parse(&a.read("maps/wchess1.bsp")?)?;
     let w = World::from_bsp(&map)?;
+    std::fs::create_dir_all("private/wchess1")?;
     let mut file = std::io::BufWriter::new(std::fs::File::create(
-        "C:/DEV/McGee/private/wchess1/floors.csv",
+        "private/wchess1/floors.csv",
     )?);
     writeln!(file, "x,y,z")?;
     let mut count = 0;
@@ -616,7 +617,7 @@ pub(super) fn render(a: &mut Assets) -> super::super::BoxFuture<'_> {
                 set_default_camera();
                 if frame == 2 {
                     crate::viewer::save_capture(std::path::Path::new(&format!(
-                        "C:/DEV/McGee/private/wchess1/{name}.png"
+                        "private/wchess1/{name}.png"
                     )))?;
                 }
                 next_frame().await;
@@ -700,7 +701,7 @@ async fn capture(
         set_default_camera();
         if frame == 2 {
             crate::viewer::save_capture(std::path::Path::new(&format!(
-                "C:/DEV/McGee/private/wchess1/{name}.png"
+                "private/wchess1/{name}.png"
             )))?;
         }
         next_frame().await;

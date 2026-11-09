@@ -9,6 +9,8 @@ pub const EYE_HEIGHT: f32 = 48.;
 pub const FIXED_DT: f32 = 1. / 120.;
 // Brisk walk: about two authored strides per second (51.3-51.7 units each).
 pub const WALK_SPEED: f32 = 104.;
+// fork: the headless routes and checks were tuned at this pace; see Player::check_pace.
+const CHECK_PACE: f32 = 210.;
 const STEP_HEIGHT: f32 = 18.;
 pub const GRAVITY: f32 = 800.;
 // Local Player jump event: half gravity in the ordinary, unpowered state.
@@ -45,6 +47,9 @@ pub struct RopeGrip {
 }
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Player {
+    /// fork: set only by headless checks and routes; ordinary play always walks at WALK_SPEED.
+    #[serde(skip)]
+    pub check_pace: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledge: Option<crate::ledge::Hang>,
     #[serde(default, skip_serializing_if = "zero")]
@@ -139,6 +144,7 @@ impl Player {
     }
     pub fn new(feet: Vec3) -> Self {
         Self {
+            check_pace: false,
             ledge: None,
             ledge_cooldown: 0.,
             tea: false,
@@ -471,7 +477,7 @@ impl Player {
         let jump = input.jump && self.grounded;
         let wish = input.wish.clamp_length_max(1.);
         let target = wish
-            * if input.run { 320. } else { WALK_SPEED }
+            * if input.run { 320. } else if self.check_pace { CHECK_PACE } else { WALK_SPEED }
             * if self.tea { 2. } else { 1. }
             * if self.immersion.level > 0 { 0.7 } else { 1. };
         let mut horizontal = self.velocity.truncate();

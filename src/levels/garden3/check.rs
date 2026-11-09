@@ -130,6 +130,7 @@ pub(super) fn check(a: &mut Assets) -> Result<()> {
     i.skip_cinematic(&map, &mut w, &mut p, &mut story)?;
     tick(&mut i, &map, &mut w, &mut p, FIXED_DT)?;
     let home = p.feet;
+    p.check_pace = true; // fork: the lead this measures was tuned before walking became 104 units/s
     // Ordinary collision/movement after handoff, with the live marble chasing.
     for _ in 0..120 {
         let before = p.feet;

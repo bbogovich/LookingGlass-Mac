@@ -466,6 +466,7 @@ impl Route {
         Ok(())
     }
     pub fn tick(&mut self, mut input: Controls) -> Result<()> {
+        self.player.check_pace = true; // fork: routes were tuned before walking became 104 units/s
         self.interactions.filter_level_controls(&mut input);
         if self.exited() {
             return Ok(());
@@ -716,7 +717,8 @@ impl Route {
             (t.center - self.player.eye()).normalize_or_zero()
         });
         let tactics = self.tactics
-            && (self.aim_at.is_none()
+            && (self.watch_input // fork: Keep's dummy aim_at would leave the Watch unpaid
+                || self.aim_at.is_none()
                 || self.aim_at.is_some_and(|id| {
                     crate::level::hit_owner(&self.interactions.levels, id).is_some()
                 }));

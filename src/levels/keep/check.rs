@@ -755,6 +755,10 @@ pub(crate) fn drive(r: &mut crate::route::Route) -> Result<()> {
             "Keep lever unreachable at {:?}",
             r.player.feet
         );
+        // fork: stopped time drops the press; with scenes skipped Alice arrives inside the Watch.
+        if r.stats.powers.stopped > 0. {
+            r.wait(r.stats.powers.stopped + 0.1)?;
+        }
         r.tick(Controls {
             wish,
             use_pressed: true,
