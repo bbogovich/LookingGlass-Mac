@@ -4,7 +4,15 @@ Looking Glass is an unfinished, independently written Rust recreation using your
 
 ## Install the Windows preview
 
-**[Download for Windows — ZIP](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)**
+Setup has separate download, verification and installation stages. Download
+completion alone is not installation completion. Wait for **Installation saved**;
+you can then close setup without starting the game. Closing the window while
+setup is busy finishes installation before closing; use **Cancel** to stop it.
+**Open files folder** shows the installed files, or the retained download when
+installation has not finished. Downloads are kept under `private/downloads` in
+the extracted Looking Glass folder, and installed files under `private/game-data`.
+
+**[Download for Windows — ZIP](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.33.0-preview.4/LookingGlass-Windows-x64-v0.33.0-preview.4.zip)**
 
 This link downloads the one package you need. The other GitHub release files
 are optional developer, verification or video files; you do not need them to play.

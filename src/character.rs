@@ -170,8 +170,8 @@ impl Animator {
         self.motion = s.motion;
         self.time = s.time;
         self.transition = s.transition;
-        self.previous = s.previous.clone();
-        self.pose = s.pose.clone();
+        self.previous.clone_from(&s.previous);
+        self.pose.clone_from(&s.pose);
         self.jumps = s.jumps;
         self.landings = s.landings;
         self.large = s.large;
@@ -558,19 +558,27 @@ impl Character {
         }
     }
     pub fn restore(&mut self, s: &Snapshot) -> Result<()> {
+        self.apply_snapshot(s, false)
+    }
+    /// Live snapshots retain particle caches; disk restores reset presentation.
+    pub fn replicate(&mut self, s: &Snapshot) -> Result<()> {
+        self.apply_snapshot(s, true)
+    }
+    fn apply_snapshot(&mut self, s: &Snapshot, replica: bool) -> Result<()> {
         s.validate(self.skeleton.bones.len())?;
         self.power_pose.state = s.power.clone();
         self.foot_state = s.feet.clone();
         self.actions.restore(&s.actions)?;
         self.acting.restore(&s.acting)?;
-        self.visuals.restore(&s.projectiles)?;
+        if replica { self.visuals.replicate(&s.projectiles)?; }
+        else { self.visuals.restore(&s.projectiles)?; }
         self.animator.restore(&s.animator);
         self.face_time = s.face_time;
         self.mouth = 0.;
         self.facing = s.facing;
         self.anchors = s.anchors;
         self.viewmodel = s.viewmodel.clone();
-        self.water_art.reset();
+        if !replica { self.water_art.reset(); }
         Ok(())
     }
     pub fn die(&mut self) {
@@ -590,6 +598,9 @@ impl Character {
         }
     }
     pub fn load(assets: &mut Assets) -> Result<Self> {
+        Self::load_for_player(assets, crate::coop::PlayerId::Blue)
+    }
+    pub fn load_for_player(assets: &mut Assets, player: crate::coop::PlayerId) -> Result<Self> {
         let def = Definition::alice(assets)?;
         let skeleton = Skeleton::parse(&assets.read(&format!("{}/{}", def.path, def.model))?)?;
         let mut clips = Vec::new();
@@ -620,7 +631,10 @@ impl Character {
             let tex = if let Some(tex) = textures.get(&path) {
                 tex.clone()
             } else {
-                let image = texture::decode(assets, &path)?;
+                let mut image = texture::decode(assets, &path)?;
+                if player == crate::coop::PlayerId::Red {
+                    crate::coop::palette::red_clothing(&path, &mut image.pixels);
+                }
                 let tex = Texture2D::from_rgba8(image.width, image.height, &image.pixels);
                 tex.set_filter(FilterMode::Linear);
                 textures.insert(path, tex.clone());
@@ -1107,6 +1121,29 @@ impl Character {
     }
     pub fn draw(&mut self, feet: Vec3, fullbright: bool) {
         self.draw_ghost(feet, fullbright, false);
+    }
+    /// Interpolated feet must carry the held toy with them. World projectiles
+    /// keep their authoritative positions; this offset lasts only for drawing.
+    pub fn draw_replica(&mut self, feet: Vec3, simulated_feet: Vec3, fullbright: bool) {
+        let anchors = self.anchors;
+        for anchor in &mut self.anchors { anchor.translation += feet - simulated_feet; }
+        self.draw_ghost(feet, fullbright, false);
+        self.anchors = anchors;
+    }
+    /// Co-op ropes follow the raised supporting hand in the displayed pose,
+    /// including the same feet interpolation and root offset as the skin.
+    pub fn replica_rope_hand(&self, feet: Vec3) -> Option<Vec3> {
+        if self.animator.motion != Motion::Rope { return None; }
+        let pose = self.skeleton.global_pose(&self.actions.pose);
+        let rotation = Quat::from_rotation_z(self.facing);
+        [["Bip01 L Finger1", "Bip01 L Finger2"], ["Bip01 R Finger1", "Bip01 R Finger2"]]
+            .into_iter().filter_map(|names| {
+            let finger = |name| self.skeleton.bones.iter()
+                .position(|b| b.name == name)
+                .map(|i| pose[i].translation);
+            let palm = (finger(names[0])? + finger(names[1])?) * 0.5;
+            Some(feet + Vec3::Z * self.animator.offset + rotation * (palm * self.scale))
+        }).max_by(|a, b| a.z.total_cmp(&b.z))
     }
     fn draw_body(&mut self, feet: Vec3, fullbright: bool, ghost: bool) {
         let feet = feet + Vec3::Z * self.animator.offset;

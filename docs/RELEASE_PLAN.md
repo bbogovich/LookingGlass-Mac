@@ -1,4 +1,44 @@
-# Walking cadence update
+# Co-op fixes and latency update
+
+**v0.33.0-preview.4**, 8 November 2026, is the current
+[experimental prerelease](https://github.com/looking-glass-project/LookingGlass/releases/tag/v0.33.0-preview.4).
+The repository, installation guide and website download links select this build.
+Both co-op players need the same version.
+
+It fixes setup persistence, adds 2560 x 1600, restores each player's aim glow,
+and provides difficulty selection, Tab and supported console commands in co-op.
+Snapshot deltas, bounded flow control and stable update schedules reduce
+avoidable network delay. It passed 985 Rust tests (six ignored), Windows CI,
+native public-invite menu, save/rejoin, particle and stall-recovery checks.
+Remote guest stutter and post-cutscene lag remain unverified on the affected
+laptop; local performance results do not establish that those reports are fixed.
+See [the evidence and remaining limits](COOP_PLAYTEST_FIXES.md).
+
+The release tag and tested executable correspond to source commit
+`fe4f38171bb5f465cd4fda1145d0f6e963502289`, now merged into `main`.
+The package, source manifest and checksums are unchanged by the merge.
+
+## First co-op preview (historical record)
+
+**v0.33.0-preview.1**, 8 November 2026, brings two-player internet co-op to the
+regular **Launch.cmd** and main/ESC menus. Host shares an invite link; Join uses
+it. Blue and red Alice have separate cameras, health and consumables.
+
+Existing solo saves can become co-op sessions. Shared checkpoints support
+resuming and rejoining; a fallen player spectates their partner for ten seconds
+before reviving nearby, and a shared death restores the last checkpoint.
+Normal paired progression has been accepted across all 39 campaign visits,
+including leaf rides, swimming and the ending. See [playable evidence and
+remaining polish](COOP_PLAYABLE.md) and [core save/rejoin checks](COOP_CORE_TESTS.md).
+
+The release incorporates the current main branch's localization and explicit
+download opt-in setup, shares its ordinary-save reader with co-op import, and
+prevents the source launcher from selecting an obsolete private playtest build.
+The Windows package includes a static C runtime, dependency notices, source
+manifest and checksums. It remains unsigned and experimental; Latest makes the
+download discoverable and is not a stability certification.
+
+## Walking cadence update (historical record)
 
 **v0.32.0-preview.2**, 9 October 2026, follows the first Windows preview below.
 [Download and release notes](https://github.com/skulitom/LookingGlass/releases/tag/v0.32.0-preview.2).

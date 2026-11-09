@@ -411,6 +411,7 @@ fn verify_mid_leg(
     let saved = round_trip(&live.checkpoint())?;
     let sizes = within_limits(&saved.ledger, &saved)?;
     let mut rebuilt = Route::resume(assets, &saved)?;
+    rebuilt.check_pace = live.check_pace; // fork: the driver's choice is not saved
     live.thaw();
     continue_identically(&mut live, &mut rebuilt, at, sizes)
 }

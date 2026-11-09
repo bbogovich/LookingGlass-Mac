@@ -11,7 +11,7 @@ pub const FIXED_DT: f32 = 1. / 120.;
 pub const WALK_SPEED: f32 = 104.;
 // fork: the headless routes and checks were tuned at this pace; see Player::check_pace.
 const CHECK_PACE: f32 = 210.;
-const STEP_HEIGHT: f32 = 18.;
+pub(crate) const STEP_HEIGHT: f32 = 18.;
 pub const GRAVITY: f32 = 800.;
 // Local Player jump event: half gravity in the ordinary, unpowered state.
 // Horizontal acceleration and animation timing remain provisional.
@@ -584,6 +584,25 @@ impl Player {
     pub fn climbing(&self) -> bool {
         self.climb.is_some()
     }
+    /// Keep a co-op climb's path and pose together while another body blocks
+    /// it. Breath, damage and other personal timers have still advanced a tick.
+    pub(crate) fn wait_at_climb_contact(&mut self, previous: &Self) {
+        self.feet = previous.feet;
+        self.velocity = previous.velocity;
+        self.grounded = previous.grounded;
+        self.ground_normal = previous.ground_normal;
+        self.ledge = previous.ledge.clone();
+        self.ledge_cooldown = previous.ledge_cooldown;
+        self.climb = previous.climb.clone();
+        self.climbs = previous.climbs;
+        self.climb_height = previous.climb_height;
+        self.climb_direction = previous.climb_direction;
+        self.jumps = previous.jumps;
+        self.landings = previous.landings;
+        self.landing_speed = previous.landing_speed;
+        self.swimming = previous.swimming;
+        self.immersion = previous.immersion;
+    }
     pub fn climb_progress(&self) -> Option<f32> {
         self.climb
             .as_ref()
@@ -714,12 +733,12 @@ fn slide(world: &World, mut position: Vec3, mut velocity: Vec3, dt: f32) -> (Vec
             normals.push(hit.normal);
         }
         let tangent_stall = hit.fraction <= 0.000001
-            && hit.normal.z.abs() < GROUND_Z
+            && hit.normal.z < GROUND_Z
             && velocity.dot(hit.normal).abs() < 0.01;
         velocity = constrain(velocity, &normals);
         // A tangent slide at large map coordinates can round back onto the
         // same plane on every sweep. Merely retaining the tangent velocity
-        // then pins Alice in mid-air while gravity accumulates indefinitely.
+        // then pins Alice against a wall or traps a swimmer under a ceiling.
         // Separate by one collision skin, only along the hit normal and only
         // when the entire tiny move and its endpoint are unobstructed.
         if tangent_stall && velocity.length_squared() > 0.0001 {
@@ -983,6 +1002,30 @@ mod tests {
             if damaging {
                 assert!((880.0..910.0).contains(&p.landing_speed));
                 assert!((45.0..55.0).contains(&stats.sanity()));
+            }
+        }
+    }
+    #[test]
+    fn upward_push_keeps_sliding_along_a_shallow_ceiling() {
+        // A vertical current must still move a body along a sloping ceiling.
+        // Exercise translated copies: tangent sweeps lose precision far from zero.
+        let normal = vec3(-0.020757, 0.058921, -1.).normalize();
+        for x in [0., 1042.2766, 4096.] {
+            for y in [0., -2758.9866, -8192.] {
+                let origin = vec3(x, y, 314.);
+                let world = World::sloped_fixture(
+                    origin - vec3(1000., 1000., 100.),
+                    origin + vec3(1000., 1000., 1000.),
+                    crate::bsp::Plane {normal, distance:normal.dot(origin)},
+                );
+                let start = origin - vec3(0., 0., 60.);
+                let mut feet = start;
+                for _ in 0..120 {
+                    (feet, _) = slide(&world, feet, Vec3::Z * 178.88544, FIXED_DT);
+                    assert!(world.body_clear(feet), "Ceiling penetrated at {feet:?}");
+                }
+                assert!((feet-start).truncate().length() > 8.,
+                    "Upward push pinned body: start={start:?}, end={feet:?}");
             }
         }
     }
