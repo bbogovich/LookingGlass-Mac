@@ -73,7 +73,8 @@ fn traverse(assets: &mut Assets, mut stats: crate::inventory::Stats, skip: bool)
 /// The return visit from the school entrance to the observatory and the exit to the Pool of
 /// Tears. Alice starts with whatever she carried out of school two.
 pub fn drive(r: &mut Route) -> Result<()> {
-    r.check_pace = false; // fork: upstream retuned this route for the 104 units/s walk
+    // fork: upstream retuned this route for the 104 units/s walk.
+    r.check_pace = false;
     // Use the same funded combat inputs as the first-school route. Repeated
     // legacy Blade throws leave Alice exposed to Boojum waves at the library.
     r.tactics = true;

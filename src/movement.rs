@@ -476,8 +476,14 @@ impl Player {
         }
         let jump = input.jump && self.grounded;
         let wish = input.wish.clamp_length_max(1.);
+        // fork: headless routes walk at the pace they were tuned for.
+        let walk = if self.check_pace {
+            CHECK_PACE
+        } else {
+            WALK_SPEED
+        };
         let target = wish
-            * if input.run { 320. } else if self.check_pace { CHECK_PACE } else { WALK_SPEED }
+            * if input.run { 320. } else { walk }
             * if self.tea { 2. } else { 1. }
             * if self.immersion.level > 0 { 0.7 } else { 1. };
         let mut horizontal = self.velocity.truncate();

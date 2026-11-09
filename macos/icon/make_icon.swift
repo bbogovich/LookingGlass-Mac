@@ -17,6 +17,7 @@ else {
     exit(1)
 }
 
+/// The face on Apple's icon grid at `pixels` x `pixels`, or nil if drawing fails.
 func render(pixels: Int) -> CGImage? {
     guard let context = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,

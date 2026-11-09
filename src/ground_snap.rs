@@ -63,6 +63,7 @@ fn gap_below(world: &World, feet: Vec3) -> f32 {
     ((MAX_DROP + PROBE_LIFT) * hit.fraction - PROBE_LIFT).clamp(0., MAX_DROP)
 }
 
+/// Ease the drawn height toward `target`, frame-rate independently.
 fn smooth(current: f32, target: f32, dt: f32) -> f32 {
     let dt = if dt.is_finite() {
         dt.clamp(0., 0.1)

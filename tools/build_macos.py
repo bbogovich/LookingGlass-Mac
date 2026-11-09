@@ -29,14 +29,17 @@ PORTRAIT = "ui/main/alicec.tga"
 
 
 def fail(message):
+    """Stop with a message; the build script never shows a traceback for expected problems."""
     sys.exit(f"build_macos: {message}")
 
 
 def run(*command, **options):
+    """Run a command, stopping the build if it fails."""
     subprocess.run([str(part) for part in command], check=True, **options)
 
 
 def version():
+    """The game version from Cargo.toml, used as the app version."""
     for line in (ROOT / "Cargo.toml").read_text().splitlines():
         if line.startswith("version"):
             return line.split('"')[1]
@@ -44,6 +47,7 @@ def version():
 
 
 def find_cargo():
+    """Cargo and a PATH that includes rustup's usual folders, which a GUI shell may lack."""
     extra = [Path.home() / ".cargo/bin", Path("/opt/homebrew/opt/rustup/bin")]
     path = os.pathsep.join([os.environ.get("PATH", "")] + [str(p) for p in extra])
     cargo = shutil.which("cargo", path=path)
@@ -53,6 +57,7 @@ def find_cargo():
 
 
 def check_system():
+    """Refuse to build where the result could not run: Intel Macs, old macOS, no Command Line Tools."""
     if sys.platform != "darwin" or platform.machine() != "arm64":
         fail("this builds on Apple silicon Macs only.")
     if int(platform.mac_ver()[0].split(".")[0]) < int(MIN_MACOS.split(".")[0]):
@@ -62,6 +67,7 @@ def check_system():
 
 
 def info_plist(executable, name, identifier, icon):
+    """The Info.plist for the game or its Setup helper."""
     plist = {
         "CFBundleDevelopmentRegion": "en",
         "CFBundleExecutable": executable,
@@ -84,6 +90,7 @@ def info_plist(executable, name, identifier, icon):
 
 
 def write_app(app, executable, source, name, identifier, icon):
+    """Assemble one app bundle: executable, Info.plist and icon."""
     contents = app / "Contents"
     (contents / "MacOS").mkdir(parents=True)
     (contents / "Resources").mkdir(exist_ok=True)
@@ -138,6 +145,7 @@ def make_icon(base):
 
 
 def sign(app, helper):
+    """Ad-hoc sign the helper, then the app, so the seal covers everything inside."""
     # Finder attributes on copied files would make codesign refuse the bundle.
     run("xattr", "-cr", app)
     for path in (helper, app):

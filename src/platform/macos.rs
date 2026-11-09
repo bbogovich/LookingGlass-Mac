@@ -37,6 +37,7 @@ pub fn display_refresh_hz() -> Option<u32> {
     (hz > 0).then_some(hz as u32)
 }
 
+/// The `index`-th controller in the XInput layout `input.rs` reads, or None.
 pub fn pad_state(index: u32) -> Option<PadState> {
     let mut raw = LgPad::default();
     // `raw` is a valid, writable LgPad with the shim's exact C layout; the shim checks
@@ -68,6 +69,7 @@ pub fn option_held() -> bool {
     unsafe { lg_option_held() == 1 }
 }
 
+/// The game is the active app and its window is key, so it may take input.
 pub fn window_focused() -> bool {
     // No arguments; reads NSApp state on the main thread that owns the window.
     unsafe { lg_window_focused() == 1 }

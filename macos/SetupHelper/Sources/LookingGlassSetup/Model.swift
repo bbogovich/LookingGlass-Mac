@@ -20,6 +20,12 @@ final class Model {
     /// Opened by the game because no data was configured: Play just returns to it.
     let fromGame = CommandLine.arguments.contains("--from-game")
     private var cancelFile: URL?
+    /// Run once the current work has finished and cleaned up.
+    private var idle: [() -> Void] = []
+
+    func whenIdle(_ action: @escaping () -> Void) {
+        if busy { idle.append(action) } else { action() }
+    }
 
     func start() async {
         do {
@@ -181,6 +187,9 @@ final class Model {
             try? FileManager.default.removeItem(at: cancel)
             cancelFile = nil
             busy = false
+            let waiting = idle
+            idle = []
+            waiting.forEach { $0() }
             await refresh()
             findSources()
         }

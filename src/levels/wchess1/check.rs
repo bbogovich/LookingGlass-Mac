@@ -530,9 +530,7 @@ pub(super) fn survey(a: &mut Assets) -> Result<()> {
     let map = Bsp::parse(&a.read("maps/wchess1.bsp")?)?;
     let w = World::from_bsp(&map)?;
     std::fs::create_dir_all("private/wchess1")?;
-    let mut file = std::io::BufWriter::new(std::fs::File::create(
-        "private/wchess1/floors.csv",
-    )?);
+    let mut file = std::io::BufWriter::new(std::fs::File::create("private/wchess1/floors.csv")?);
     writeln!(file, "x,y,z")?;
     let mut count = 0;
     for x in (-2816..=4352).step_by(32) {

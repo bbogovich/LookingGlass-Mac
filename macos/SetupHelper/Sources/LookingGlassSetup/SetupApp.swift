@@ -2,12 +2,25 @@
 // The macOS counterpart of Setup.cmd; the rules themselves run in the engine.
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set once the window appears, so quitting can see whether an import is running.
+    var model: Model?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Also correct when run as a bare executable during development.
         NSApp.setActivationPolicy(.regular)
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// Quitting mid-import (Quit, Esc, Cmd+Q or closing the window) cancels it and waits, so
+    /// the engine removes its partial copy and stops the extractor before the helper exits.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model, model.busy else { return .terminateNow }
+        model.cancel()
+        model.whenIdle { sender.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
 }
 
 @main
@@ -20,6 +33,7 @@ struct SetupApp: App {
             SetupView(model: model)
                 .frame(width: 560)
                 .task {
+                    delegate.model = model
                     bringToFront()
                     await model.start()
                 }

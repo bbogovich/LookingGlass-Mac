@@ -7,10 +7,8 @@ Problems specific to the Mac build, or found while testing it. The [general limi
 | Issue | Workaround |
 | --- | --- |
 | Co-op **hosting over the internet** is not available. It needs a Windows helper and says "Automatic internet hosting currently supports Windows." Joining and local co-op are untested on Mac. | None yet |
-| **Command+Q** and **Quit** from the Dock close the game without its exit autosave. The red window button and the in-game Quit do save. | Use the in-game Quit, or save first |
 | Holding **Option** to open Setup, then choosing **Quit** in Setup, still starts the game when game files are already set up. | Quit the game afterwards |
 | If the game cannot start, for example because a game file is damaged, its icon bounces and it closes without a message. | Hold Option while opening it to run Setup, or run `"/Applications/Looking Glass.app/Contents/MacOS/looking-glass"` in Terminal to see the error |
-| Quitting **Setup while it is importing** can leave a partial copy of the game files (about 1 GB) in `~/Library/Application Support/Looking Glass/private/game-data`. | Use **Cancel** first. Folders named `import-…` that `data-path.txt` does not point at can be deleted |
 | Switching from full screen to a window in the game's settings may not apply the chosen window size. | Pick the size again, or use Command+Return |
 | Laptop function keys control brightness and volume. | Hold **Fn** for F5, F9 and others, or rebind them |
 | Tested with an Xbox controller only. | |

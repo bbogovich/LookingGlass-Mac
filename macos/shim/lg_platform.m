@@ -9,6 +9,7 @@
 
 #import <AppKit/AppKit.h>
 #import <GameController/GameController.h>
+#import <objc/runtime.h>
 #include <stdint.h>
 
 // Must match `LgPad` in src/platform/macos.rs (and the XInput XINPUT_GAMEPAD layout).
@@ -40,6 +41,7 @@ enum {
     LG_Y = 0x8000,
 };
 
+// A GameController stick value (-1...1) as an XInput thumb value.
 static int16_t lg_axis(float value) {
     if (value != value) return 0;  // NaN
     if (value > 1.0f) value = 1.0f;
@@ -47,12 +49,14 @@ static int16_t lg_axis(float value) {
     return (int16_t)(value * 32767.0f);
 }
 
+// A GameController trigger value (0...1) as an XInput trigger value.
 static uint8_t lg_trigger(float value) {
     if (value != value || value <= 0.0f) return 0;
     if (value >= 1.0f) return 255;
     return (uint8_t)(value * 255.0f + 0.5f);
 }
 
+// `bit` when the button is held, so buttons can be OR-ed into the XInput mask.
 static uint16_t lg_bit(GCControllerButtonInput *button, uint16_t bit) {
     return (button != nil && button.isPressed) ? bit : 0;
 }
@@ -151,6 +155,7 @@ int32_t lg_option_held(void) {
 // The window's latest fullscreen state, until read: -1 none, 0 windowed, 1 fullscreen.
 static int32_t lg_fullscreen_change = -1;
 
+// Read and clear the latest fullscreen change (see lg_fullscreen_change).
 int32_t lg_take_fullscreen_change(void) {
     int32_t change = lg_fullscreen_change;
     lg_fullscreen_change = -1;
@@ -159,9 +164,25 @@ int32_t lg_take_fullscreen_change(void) {
 
 // Cmd+Return toggles fullscreen in every game loop. The event is consumed here, so the
 // game never sees it as Enter (which would skip a scene or press a menu button).
+// Cmd+Q and the Dock's Quit call -terminate:, which miniquad lets end the process at once,
+// skipping the game's exit autosave. Close the window instead: miniquad turns that into the
+// quit request every game loop already handles. With no window left, quit as normal.
+static NSApplicationTerminateReply lg_should_terminate(id self, SEL _cmd, NSApplication *app) {
+    NSWindow *window = app.windows.firstObject;
+    if (window == nil || !window.visible) return NSTerminateNow;
+    [window performClose:nil];
+    return NSTerminateCancel;
+}
+
+// Install the Quit, Cmd+Return and fullscreen hooks once, after AppKit has started.
 static void lg_install_window_hooks(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
+        Class delegate = [NSApp.delegate class];
+        if (delegate != Nil) {
+            class_addMethod(delegate, @selector(applicationShouldTerminate:),
+                            (IMP)lg_should_terminate, "Q@:@");
+        }
         enum { LG_KEY_RETURN = 36, LG_KEY_KEYPAD_ENTER = 76 };
         NSEventModifierFlags relevant = NSEventModifierFlagCommand | NSEventModifierFlagShift |
                                         NSEventModifierFlagOption | NSEventModifierFlagControl;

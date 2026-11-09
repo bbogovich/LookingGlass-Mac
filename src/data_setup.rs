@@ -86,6 +86,7 @@ const LANGUAGES: [Language; 5] = [
     },
 ];
 
+/// The supported language with this code (`en`, `de`, `fr`, `es`, `nl`).
 fn language(code: &str) -> Result<&'static Language> {
     LANGUAGES
         .iter()
@@ -93,6 +94,7 @@ fn language(code: &str) -> Result<&'static Language> {
         .with_context(|| format!("Unknown language: {code}"))
 }
 
+/// A language pack under its own name or the name it has in the 2011 archive.
 fn is_language_file(name: &str) -> bool {
     LANGUAGES.iter().any(|l| {
         name.eq_ignore_ascii_case(l.file) || l.bundle.is_some_and(|b| name.eq_ignore_ascii_case(b))
@@ -167,25 +169,33 @@ struct Options {
 }
 impl Options {
     fn check_cancel(&self) -> Result<()> {
-        if self.cancel.as_ref().is_some_and(|p| p.exists()) {
+        if OUTPUT_CLOSED.load(std::sync::atomic::Ordering::Relaxed)
+            || self.cancel.as_ref().is_some_and(|p| p.exists())
+        {
             bail!("Setup cancelled. Previous settings and saves were kept.");
         }
         Ok(())
     }
 }
 
+/// Set once stdout fails: the Setup window that reads it has gone, so the work is cancelled.
+static OUTPUT_CLOSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Write one JSON line for the Setup helper, which reads stdout line by line.
 fn print_json(value: &impl Serialize) {
-    println!(
-        "{}",
-        serde_json::to_string(value).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
-    );
+    let line = serde_json::to_string(value).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+    let mut out = std::io::stdout().lock();
+    if writeln!(out, "{line}").and_then(|_| out.flush()).is_err() {
+        OUTPUT_CLOSED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
+/// Report a step, with a percentage when the step can measure one.
 fn progress(message: &str, percent: Option<u8>) {
     print_json(&serde_json::json!({ "progress": message, "percent": percent }));
-    let _ = std::io::stdout().flush();
 }
 
+/// The final line of a command: its report, or the error to show the player.
 fn finish(result: Result<Report>) {
     match result {
         Ok(report) => print_json(&serde_json::json!({ "done": true, "report": report })),
@@ -204,6 +214,7 @@ struct Info {
     sha256: &'static str,
     languages: Vec<serde_json::Value>,
 }
+/// What the Setup helper needs to offer the optional download, and the languages.
 fn info() -> Info {
     Info {
         archive_name: ARCHIVE_NAME,
@@ -249,6 +260,7 @@ fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
         })
 }
 
+/// Every required core pack is in `dir`, matched case-insensitively.
 fn has_core_packs(dir: &Path) -> bool {
     REQUIRED.iter().all(|name| find_file(dir, name).is_some())
 }
@@ -450,6 +462,7 @@ fn language_places(base: &Path) -> [PathBuf; 3] {
     [base.to_path_buf(), base.join("loc"), beside]
 }
 
+/// Validate a game folder with the same rules as Setup.cmd, without changing it.
 fn check_folder(folder: &Path) -> Report {
     let mut report = Report::default();
     let Some(base) = find_base(folder, false) else {
@@ -515,6 +528,7 @@ fn check_configured(root: &Path) -> Report {
     }
 }
 
+/// The base folder named by `private/data-path.txt`, resolved against `root`.
 fn configured_base(root: &Path) -> Option<PathBuf> {
     let text = fs::read_to_string(root.join("private/data-path.txt")).ok()?;
     let path = PathBuf::from(text.trim());
@@ -534,6 +548,7 @@ pub fn configured_ok(root: &Path) -> bool {
         .is_some_and(|base| has_core_packs(&base) && active_language(&base, false).is_some())
 }
 
+/// A new, unused path in `dir` (time and process id), for imports and temporary files.
 fn unique(dir: &Path, prefix: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -552,6 +567,7 @@ pub fn save_text(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
+/// The archive's SHA-256, reporting progress and stopping when Setup cancels.
 fn sha256_file(path: &Path, opts: &Options) -> Result<String> {
     use sha2::{Digest, Sha256};
     let mut file = File::open(path)?;
@@ -582,6 +598,7 @@ enum Tool {
     SevenZip(PathBuf),
 }
 
+/// The archive extractor: `--extractor` if given, else the system bsdtar, else 7-Zip.
 fn tool(opts: &Options) -> Result<Tool> {
     if let Some(path) = &opts.extractor {
         let tar = path
@@ -799,6 +816,26 @@ fn extract(source: &Path, dest: &Path, opts: &Options) -> Result<()> {
     result
 }
 
+/// An `import-*` folder directly inside `game_data`: the only kind Setup ever deletes.
+fn is_import_folder(game_data: &Path, dir: &Path) -> bool {
+    dir.parent() == Some(game_data)
+        && dir
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("import-"))
+}
+
+/// Delete imports left by an interrupted Setup: every `import-*` folder except the one in use.
+fn remove_stale_imports(game_data: &Path, configured: Option<&Path>) {
+    let Ok(entries) = fs::read_dir(game_data) else {
+        return;
+    };
+    for dir in entries.filter_map(|e| e.ok()).map(|e| e.path()) {
+        if is_import_folder(game_data, &dir) && !configured.is_some_and(|c| c.starts_with(&dir)) {
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+}
+
 /// Import `source` (a game folder or a .7z/.zip archive) into `private/game-data`.
 fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
     let source = source
@@ -807,6 +844,7 @@ fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
     let game_data = root.join("private/game-data");
     let cache = game_data.join("languages");
     fs::create_dir_all(&cache)?;
+    remove_stale_imports(&game_data, configured_base(root).as_deref());
     let import = unique(&game_data, "import-").join("base");
     let result = (|| {
         let staged = if source.is_dir() {
@@ -906,7 +944,7 @@ fn setup(root: &Path, source: &Path, opts: &Options) -> Result<Report> {
             &format!("{relative}\n"),
         )?;
         if let Some(old) = previous.and_then(|b| b.parent().map(Path::to_path_buf)) {
-            if old != import.parent().unwrap_or(&import) && old.starts_with(&game_data) {
+            if old != import.parent().unwrap_or(&import) && is_import_folder(&game_data, &old) {
                 let _ = fs::remove_dir_all(old);
             }
         }
@@ -974,6 +1012,7 @@ fn apply_language(base: &Path, cache: &Path, code: &str) -> Result<()> {
     result
 }
 
+/// Switch the imported game files to `code` using the language cache.
 fn set_language(root: &Path, code: &str, opts: &Options) -> Result<Report> {
     let code = language(code)?.code;
     let base = configured_base(root).context("No game data is configured yet. Set it up first.")?;
@@ -1119,6 +1158,19 @@ mod tests {
         let first = base.parent().unwrap().to_path_buf();
         setup(&root, &data, &Options::default()).unwrap();
         assert!(!first.exists());
+        // An import interrupted by quitting Setup is swept by the next one; the one in use is kept.
+        let game_data = root.join("private/game-data");
+        let stale = game_data.join("import-interrupted/base");
+        fs::create_dir_all(&stale).unwrap();
+        let in_use = configured_base(&root).unwrap();
+        remove_stale_imports(&game_data, Some(&in_use));
+        assert!(!stale.parent().unwrap().exists() && in_use.is_dir());
+        assert!(game_data.join("languages").is_dir());
+        // A data path naming game-data itself must never let an import delete everything.
+        assert!(!is_import_folder(&game_data, &game_data));
+        save_text(&root.join("private/data-path.txt"), "private/game-data\n").unwrap();
+        setup(&root, &data, &Options::default()).unwrap();
+        assert!(configured_ok(&root) && game_data.join("languages").is_dir());
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(data);
     }
