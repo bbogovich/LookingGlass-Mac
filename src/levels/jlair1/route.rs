@@ -75,7 +75,7 @@ fn steer(r: &mut Route, goal: Vec3, jump: bool) -> Result<()> {
         let leap = jump && !jumped && r.player.grounded;
         jumped |= leap;
         // fork: brake in the air as beyond_route does; full steering overshoots the far platform.
-        let pace = if r.player.grounded {
+        let pace = if r.player.grounded || !r.check_pace {
             1.
         } else {
             ((2. * 420. * d.length()).sqrt() / 320.).min(1.) * 0.95
@@ -94,6 +94,7 @@ fn steer(r: &mut Route, goal: Vec3, jump: bool) -> Result<()> {
 }
 
 fn drive_inner(r: &mut Route, native: bool) -> Result<()> {
+    r.check_pace = !native; // fork: upstream tuned the native-cast route for the 104 units/s walk
     let skip = r.skip_cinematics;
     r.stop_at_exit = true;
     r.tactics = native;

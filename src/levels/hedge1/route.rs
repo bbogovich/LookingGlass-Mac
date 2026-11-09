@@ -277,6 +277,7 @@ fn plan(r: &Route, goal: Vec3) -> Result<Vec<Vec3>> {
 }
 
 pub(crate) fn drive(r: &mut Route) -> Result<()> {
+    r.check_pace = false; // fork: upstream retuned this route for the 104 units/s walk
     std::fs::create_dir_all("private/hedge1")?;
     r.tactics = true;
     r.conserve_will = false;

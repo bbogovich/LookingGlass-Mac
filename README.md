@@ -193,6 +193,7 @@ and bug-report requirements. Development shortcuts are under
 ## Documentation
 
 - [Installation](docs/INSTALL.md) and [controls](docs/CONTROLS.md)
+- Building on macOS (this fork): [build and play](docs/INSTALL-macOS.md) and [Mac known issues](docs/MACOS_KNOWN_ISSUES.md)
 - [Campaign route audit](docs/CAMPAIGN_RUN_AUDIT.md) and [known issues](docs/KNOWN_ISSUES.md)
 - [Validation](docs/VALIDATION.md) and [save behavior](docs/SAVES.md)
 - [Release preparation](docs/RELEASE_PLAN.md)
