@@ -13,8 +13,15 @@ use std::{
 };
 
 pub const HELPER_VERSION: &str = "2026.10.2";
+#[cfg(not(target_os = "macos"))]
 const HELPER_HASH: &str = "12c7c887f8aaab779aef1dfa9b60673530a5adb88ecc55dd6df8f56e0b70f199";
+#[cfg(not(target_os = "macos"))]
 const HELPER_SIZE: u64 = 55_329_336;
+// fork: the unpacked darwin-arm64 binary of the same release.
+#[cfg(target_os = "macos")]
+const HELPER_HASH: &str = "823f993ef362fba5e0e288db6f3452d8de34291632971c7a40b79548420e9a18";
+#[cfg(target_os = "macos")]
+const HELPER_SIZE: u64 = 39_433_216;
 
 fn hidden(command: &mut Command) -> &mut Command {
     #[cfg(windows)]
@@ -51,11 +58,15 @@ fn verified(path: &Path) -> Result<()> {
 /// constants; paths are passed via environment values, never interpolated code.
 pub fn ensure_helper(directory: &Path, cancel: &AtomicBool) -> Result<PathBuf> {
     ensure!(
-        cfg!(windows),
-        "Automatic internet hosting currently supports Windows."
+        // fork: macOS on Apple Silicon has its own download path.
+        cfg!(windows) || cfg!(all(target_os = "macos", target_arch = "aarch64")),
+        "Automatic internet hosting currently supports Windows and macOS."
     );
     fs::create_dir_all(directory)?;
-    let target = directory.join(format!("cloudflared-{HELPER_VERSION}.exe"));
+    let target = directory.join(format!(
+        "cloudflared-{HELPER_VERSION}{}",
+        std::env::consts::EXE_SUFFIX
+    ));
     if target.exists() {
         verified(&target)?;
         return Ok(target);
@@ -65,7 +76,12 @@ pub fn ensure_helper(directory: &Path, cancel: &AtomicBool) -> Result<PathBuf> {
         std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
     ));
+    // fork: macOS fetches Cloudflare's archive with curl instead of PowerShell.
+    #[cfg(target_os = "macos")]
+    let mut child = crate::platform::coop_helper::start_helper_download(&partial)?;
+    #[cfg(not(target_os = "macos"))]
     let script = "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.2/cloudflared-windows-amd64.exe' -OutFile $env:LG_COOP_HELPER_DOWNLOAD";
+    #[cfg(not(target_os = "macos"))]
     let mut child = hidden(Command::new("powershell.exe").args([
         "-NoLogo",
         "-NoProfile",
@@ -93,6 +109,8 @@ pub fn ensure_helper(directory: &Path, cancel: &AtomicBool) -> Result<PathBuf> {
             }
             thread::sleep(Duration::from_millis(50));
         }
+        #[cfg(target_os = "macos")]
+        crate::platform::coop_helper::unpack_helper(&partial)?;
         verified(&partial)?;
         if target.exists() {
             verified(&target)?;

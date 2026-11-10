@@ -84,6 +84,21 @@ You can rebind keys in the game's options. Xbox controllers have been tested; ot
 
 Holding Option also closes the Finder window you opened the game from. That is normal Finder behaviour: press Option just after you double-click if you want to keep it open.
 
+## Co-op
+
+Two-player co-op works as on Windows: see [Playing co-op](COOP_QUICKSTART.md) for Host, Join and the in-game controls. A Mac player can host or join. Both players need the same version of Looking Glass and compatible game files.
+
+The first time you host, the game downloads Cloudflare's tunnel helper (`cloudflared`, about 20 MB). This lets the other player connect without any router or firewall changes. The download is checked against fixed sizes and hashes before it runs, and it is kept for next time (see [Where your files are](#where-your-files-are)). The helper stops when you quit the game.
+
+To try co-op with two windows on one Mac, from the source folder:
+
+```sh
+cargo build --release --locked
+python3 tools/run_coop_pair.py --data Alice1/bin/base --menu
+```
+
+Choose **Co-op > Host** in one window and copy the invite, then **Co-op > Join** in the other. Without `--menu`, the two windows connect by themselves at the start of the campaign; add `--local` to skip the internet invite. Playing between two Macs, or a Mac and a Windows PC, should work but has not been tested yet.
+
 ## Updating
 
 ```sh
@@ -103,6 +118,7 @@ Everything is in `~/Library/Application Support/Looking Glass/private`:
 | Settings | `preferences.json` |
 | Game files imported by Setup | `game-data/` |
 | Downloaded archive | `downloads/` |
+| Co-op tunnel helper | `coop/helpers/` |
 
 To open the folder, choose **Go > Go to Folder** in Finder and paste the first path above. To remove the game, delete the app and that `Looking Glass` folder. Deleting the folder also deletes your saves.
 
@@ -119,6 +135,7 @@ Saves belong to the game files they were made with, so saves from the 2000 CD fi
 | Setup says files are missing | Choose the `Alice1` folder itself, or its `bin/base` folder |
 | Setup warns about `pak5_mod.pk3` | Your files are from the 2000 CD. The game runs, but the 2011 set is the one the project supports |
 | The game shows a generic icon | The app was built without game files. It works normally |
+| Hosting co-op says `Internet helper verification failed` | Delete the `coop/helpers` folder and host again |
 | Function keys change volume or brightness | Hold **Fn**, or rebind the action in the game's options |
 
 The upstream project does not support the Mac version, so please do not report Mac problems there.

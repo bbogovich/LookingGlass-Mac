@@ -5,6 +5,8 @@
 //! Objective-C shim in `macos/shim/`. Upstream files only call into this module.
 
 #[cfg(target_os = "macos")]
+pub mod coop_helper;
+#[cfg(target_os = "macos")]
 mod macos;
 
 use std::path::{Path, PathBuf};

@@ -6,7 +6,8 @@ Problems specific to the Mac build, or found while testing it. The [general limi
 
 | Issue | Workaround |
 | --- | --- |
-| Co-op **hosting over the internet** is not available. It needs a Windows helper and says "Automatic internet hosting currently supports Windows." Joining and local co-op are untested on Mac. | None yet |
+| Co-op between a Mac and a Windows PC has not been tested, and neither has co-op between two Macs. Two windows on one Mac connect over the internet and play. | |
+| If the game is force-quit or crashes while hosting co-op, the tunnel helper (`cloudflared`) keeps running. Upstream's Windows build does the same. | Quit it in Activity Monitor |
 | Holding **Option** to open Setup, then choosing **Quit** in Setup, still starts the game when game files are already set up. | Quit the game afterwards |
 | If the game cannot start, for example because a game file is damaged, its icon bounces and it closes without a message. | Hold Option while opening it to run Setup, or run `"/Applications/Looking Glass.app/Contents/MacOS/looking-glass"` in Terminal to see the error |
 | Switching from full screen to a window in the game's settings may not apply the chosen window size. | Pick the size again, or use Command+Return |
